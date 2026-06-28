@@ -1,0 +1,17 @@
+data_path:
+  solar_data: data/raw/solar_cleaned.csv
+  wind_data: data/raw/wind_data.csv
+
+features:
+  solar:
+    - irradiation
+    - temperature
+    - module_temp
+    - hour
+    - day
+    - month
+
+  wind:
+    - wind_speed
+    - direction
+    - theoretical_power

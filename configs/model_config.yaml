@@ -1,0 +1,9 @@
+solar_model:
+  type: RandomForest
+  n_estimators: 200
+  max_depth: 10
+
+wind_model:
+  type: XGBoost
+  learning_rate: 0.05
+  n_estimators: 200
