@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecopredict-ai"
+version = "1.0.0"
+description = "Hybrid solar-wind forecasting, optimization, and fault detection"
+requires-python = ">=3.11"
+readme = "README.md"
+# Runtime deps stay in requirements.txt for Docker / Railway.
+# Install base:  pip install -r requirements.txt
+# Editable + extras:  pip install -e ".[sim-cacer]"
+dependencies = []
+
+[project.optional-dependencies]
+# P4 elective stack (NOT installed in production Docker image).
+# No xlwings / pywin32 / Excel — keep Windows-only CACER I/O out of EcoPradict CI.
+sim-cacer = [
+    "pvlib>=0.10.0",
+    "pandapower>=2.14.0",
+    "numpy-financial>=1.0.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "black>=24.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "dashboard*", "api*"]
+exclude = ["tests*", "third_party*", "notebooks*", "_research*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+extend-exclude = '''
+/(
+  \.venv
+  | venv
+  | data
+  | artifacts
+  | vector_db
+  | yolo_fault_detection
+  | third_party
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+  ".venv",
+  "venv",
+  "data",
+  "artifacts",
+  "vector_db",
+  "yolo_fault_detection",
+  "third_party",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = [
+  "E501",  # line length handled by black
+  "E402",  # module import not at top (Streamlit path bootstrap)
+  "E741",  # ambiguous variable name
+]
+
+[tool.ruff.lint.per-file-ignores]
+"dashboard/views/*" = ["E402"]
+"api/*" = ["E402"]

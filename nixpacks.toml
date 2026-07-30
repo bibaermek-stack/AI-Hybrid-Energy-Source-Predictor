@@ -1,0 +1,5 @@
+# Keep config minimal — custom install cmds often break Railway's venv path.
+# Python version: .python-version + runtime.txt + NIXPACKS_PYTHON_VERSION
+
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.12"

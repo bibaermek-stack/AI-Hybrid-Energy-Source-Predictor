@@ -1,0 +1,5 @@
+# Development / CI only (not required for runtime Docker image)
+ruff>=0.6.0
+black>=24.0.0
+# unittest is stdlib; pytest optional
+pytest>=8.0.0

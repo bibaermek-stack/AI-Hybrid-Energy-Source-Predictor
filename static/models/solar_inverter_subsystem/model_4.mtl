@@ -1,0 +1,9 @@
+﻿# Auto-generated for EcoPradict inverter lab (CAD export had no MTL)
+newmtl material_4
+Ka 1.000 1.000 1.000
+Kd 1.000 1.000 1.000
+Ks 0.200 0.200 0.200
+Ns 40.0
+d 1.0
+illum 2
+map_Kd Material__733basecolortexture_3.png.png

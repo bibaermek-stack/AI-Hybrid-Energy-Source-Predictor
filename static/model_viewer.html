@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solarman Inverter2501221272 — 3D Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0b0f19;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: #f3f4f6;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        /* Glassmorphism Telemetry Card */
+        .glass-card {
+            position: absolute;
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            z-index: 10;
+        }
+
+        #telemetry-panel {
+            top: 20px;
+            left: 20px;
+            width: 280px;
+        }
+
+        #control-panel {
+            top: 20px;
+            right: 20px;
+            width: 220px;
+        }
+
+        h3 {
+            margin: 0 0 12px 0;
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: #58a6ff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 8px;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .data-label {
+            color: #9ca3af;
+        }
+
+        .data-value {
+            font-weight: 600;
+            color: #f3f4f6;
+        }
+
+        .highlight-value {
+            color: #388bfd;
+            font-weight: bold;
+        }
+
+        .warning-value {
+            color: #ff7b72;
+            font-weight: bold;
+        }
+
+        /* Mode Selection Buttons */
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        button {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #f3f4f6;
+            padding: 8px 12px;
+            font-size: 0.85rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        button.active {
+            background: linear-gradient(90deg, #1f6feb 0%, #388bfd 100%);
+            border-color: #388bfd;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 0 10px rgba(56, 139, 253, 0.4);
+        }
+
+        /* Loading Spinner */
+        #loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #0b0f19;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s ease;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(56, 139, 253, 0.1);
+            border-radius: 50%;
+            border-top-color: #388bfd;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            margin-top: 24px;
+            font-size: 1.1rem;
+            color: #9ca3af;
+            font-weight: 500;
+            text-align: center;
+            max-width: 80%;
+        }
+
+        /* Color Bar Legend */
+        #legend-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 320px;
+            display: none; /* Only shown in thermal mode */
+        }
+
+        .legend-bar {
+            height: 15px;
+            border-radius: 4px;
+            background: linear-gradient(90deg, 
+                #0000ff 0%,   /* Cold Blue */
+                #00ffff 25%,  /* Cyan */
+                #00ff00 50%,  /* Green */
+                #ffff00 75%,  /* Yellow */
+                #ff0000 100%  /* Hot Red */
+            );
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        /* Language labels toggle */
+        [lang="kk"] { display: none; }
+
+        /* —— Compact UI: phone + Streamlit embed —— */
+        body.embedded #telemetry-panel,
+        body.embedded #control-panel {
+            padding: 8px 10px;
+            border-radius: 10px;
+        }
+        body.embedded #telemetry-panel {
+            top: 8px;
+            left: 8px;
+            width: min(42vw, 160px);
+            max-height: 72vh;
+            overflow-y: auto;
+            font-size: 0.72rem;
+        }
+        body.embedded #control-panel {
+            top: 8px;
+            right: 8px;
+            width: min(40vw, 148px);
+            font-size: 0.72rem;
+        }
+        body.embedded h3 {
+            font-size: 0.78rem;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            gap: 4px;
+        }
+        body.embedded .data-row {
+            margin-bottom: 3px;
+            font-size: 0.7rem;
+        }
+        body.embedded .btn-group { margin-top: 6px; gap: 4px; }
+        body.embedded button {
+            padding: 4px 6px;
+            font-size: 0.65rem;
+        }
+        body.embedded input[type="range"] { height: 4px; }
+        body.embedded #embed-lock-note {
+            margin-top: 6px !important;
+            font-size: 0.65rem !important;
+            line-height: 1.25 !important;
+        }
+        body.embedded #legend-container {
+            width: min(90vw, 240px);
+            bottom: 8px;
+        }
+
+        /*
+         * Mobile + Streamlit embed: hide glass panels so 3D fills the frame.
+         * Full screen (no body.embedded) still shows them.
+         * Desktop (min-width 769) is unchanged — panels always visible.
+         */
+        @media (max-width: 768px) {
+            body.embedded #telemetry-panel,
+            body.embedded #control-panel,
+            body.embedded #legend-container,
+            body.embedded #embed-lock-note {
+                display: none !important;
+            }
+
+            /* Full-screen mobile: keep compact panels (not hidden) */
+            body:not(.embedded) #telemetry-panel {
+                top: 6px;
+                left: 6px;
+                width: min(46vw, 150px);
+                max-height: 55vh;
+                overflow-y: auto;
+                padding: 6px 8px;
+            }
+            body:not(.embedded) #control-panel {
+                top: 6px;
+                right: 6px;
+                width: min(44vw, 140px);
+                padding: 6px 8px;
+            }
+            body:not(.embedded) h3 {
+                font-size: 0.72rem;
+                margin-bottom: 4px;
+                padding-bottom: 3px;
+            }
+            body:not(.embedded) .data-row {
+                margin-bottom: 2px;
+                font-size: 0.65rem;
+            }
+            body:not(.embedded) .glass-card {
+                padding: 6px 8px;
+                border-radius: 8px;
+            }
+            body:not(.embedded) button {
+                padding: 3px 5px;
+                font-size: 0.62rem;
+            }
+            body:not(.embedded) #legend-container {
+                width: min(88vw, 220px);
+                bottom: 6px;
+            }
+        }
+
+        @media (max-width: 420px) {
+            body:not(.embedded) #telemetry-panel .data-row:nth-child(n+6) {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-msg">Loading inverter 3D model...</div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <!-- Telemetry Information Overlay — bound to Solarman inverter SN -->
+    <div id="telemetry-panel" class="glass-card">
+        <h3>
+            <span class="lang-en">Inverter live</span>
+            <span class="lang-kk">Инвертор live</span>
+        </h3>
+        <div class="data-row">
+            <span class="data-label">SN</span>
+            <span class="data-value" id="val-sn">2501221272</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">Device ID</span>
+            <span class="data-label lang-kk">Device ID</span>
+            <span class="data-value" id="val-device-id">—</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">Grid status</span>
+            <span class="data-label lang-kk">Желі күйі</span>
+            <span class="data-value highlight-value" id="val-grid">—</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">AC Power</span>
+            <span class="data-label lang-kk">AC қуат</span>
+            <span class="data-value highlight-value" id="val-power">0.00 kW</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">DC Power</span>
+            <span class="data-label lang-kk">DC қуат</span>
+            <span class="data-value" id="val-dc-power">0.00 kW</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">Device Temp</span>
+            <span class="data-label lang-kk">Құрылғы темп.</span>
+            <span class="data-value highlight-value" id="val-surface">35.0 °C</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">Ambient Temp</span>
+            <span class="data-label lang-kk">Қоршаған орта</span>
+            <span class="data-value" id="val-ambient">25 °C</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">E-today</span>
+            <span class="data-label lang-kk">Бүгін</span>
+            <span class="data-value" id="val-e-today">0 kWh</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">Rated</span>
+            <span class="data-label lang-kk">Номинал</span>
+            <span class="data-value" id="val-rated">25 kW</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label lang-en">Load of rated</span>
+            <span class="data-label lang-kk">Жүктеме</span>
+            <span class="data-value warning-value" id="val-loss">0%</span>
+        </div>
+    </div>
+
+    <!-- Interactive Viewer Controls -->
+    <div id="control-panel" class="glass-card">
+        <h3>
+            <span style="font-size: 1.3rem;">⚙️</span>
+            <span class="lang-en">Visualization Mode</span>
+            <span class="lang-kk">Бейнелеу режимі</span>
+        </h3>
+        
+        <div class="btn-group">
+            <button id="btn-standard" class="active" onclick="setViewMode('standard')">
+                <span class="lang-en">Standard</span>
+                <span class="lang-kk">Стандартты</span>
+            </button>
+            <button id="btn-thermal" onclick="setViewMode('thermal')">
+                <span class="lang-en">Thermal</span>
+                <span class="lang-kk">Термиялық</span>
+            </button>
+        </div>
+
+        <p class="data-label lang-en" style="font-size:0.8rem;margin:12px 0 0 0;">
+            Lighting only (not power simulation). Telemetry = Solarman API.
+        </p>
+        <p class="data-label lang-kk" style="font-size:0.8rem;margin:12px 0 0 0;">
+            Жарық қана (қуат симуляциясы емес). Телеметрия = Solarman API.
+        </p>
+        <div style="margin-top: 12px;">
+            <div class="data-row" style="margin-bottom: 4px;">
+                <span class="data-label lang-en">Scene light hour</span>
+                <span class="data-label lang-kk">Сахна жарығы (сағат)</span>
+                <span class="data-value" id="val-time">12:00</span>
+            </div>
+            <input type="range" id="time-slider" min="6" max="18" step="0.5" value="12" style="width: 100%; cursor: pointer;" oninput="onTimeSliderChange(this.value)">
+        </div>
+
+        <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between;">
+            <span class="data-label lang-en" style="font-size: 0.85rem;">Auto Rotate</span>
+            <span class="data-label lang-kk" style="font-size: 0.85rem;">Авто айналу</span>
+            <input type="checkbox" id="chk-rotate" style="cursor: pointer;" onchange="toggleAutoRotate(this.checked)" checked disabled>
+        </div>
+    </div>
+
+    <!-- Thermal Heatmap Legend -->
+    <div id="legend-container" class="glass-card">
+        <div class="legend-bar"></div>
+        <div class="legend-labels">
+            <span id="legend-min">10°C</span>
+            <span style="color:#00ff00;">35°C</span>
+            <span id="legend-max">70°C</span>
+        </div>
+    </div>
+
+    <!-- Import Libraries (r128 build + examples; ensureThreeLibs() adds fallbacks) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+
+    <script>
+        // Global variables
+        let scene, camera, renderer, controls;
+        let sunLight, sunSphere, ambientLight;
+        let mainGroup;
+        let loadedModels = [];
+        let viewMode = 'standard'; // 'standard' or 'thermal'
+        let autoRotate = true; // default spin (disabled for paper-thin Meshy panel)
+        let lockTopDownView = false; // Inverter2411046235 — no edge-on orbit
+        // embedded=1 → Streamlit preview (manual orbit locked). Full tab: free orbit.
+        let isEmbedded = false;
+
+        // Telemetry — bound to Solarman Inverter SN (URL query from dashboard)
+        let data = {
+            sn: '2501221272',
+            device_id: '',
+            grid: '',
+            temp: 25.0,         // Ambient Temperature
+            irrad: 800,         // derived irradiance proxy
+            module_temp: 35.0,  // Device / IGBT temperature
+            power: 0.0,         // AC power kW
+            dc_power: 0.0,      // DC power kW
+            e_today: 0.0,
+            e_total: 0.0,
+            rated: 25.0,
+            hour: 12.0,
+            lang: 'kk'
+        };
+
+        function showFatalError(msg) {
+            const el = document.getElementById('loading-screen');
+            if (!el) { alert(msg); return; }
+            el.style.display = 'flex';
+            el.style.opacity = '1';
+            el.innerHTML = '<div style="max-width:520px;padding:24px;text-align:center;">' +
+                '<div style="font-size:2rem;margin-bottom:12px;">⚠️</div>' +
+                '<div class="loading-text" style="color:#ff7b72;white-space:pre-wrap;">' + msg + '</div>' +
+                '<p style="color:#9ca3af;font-size:0.85rem;margin-top:16px;">Three.js CDN + models/ folder required. Open browser console (F12) for details.</p>' +
+                '</div>';
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = () => resolve(src);
+                s.onerror = () => reject(new Error('Failed: ' + src));
+                document.head.appendChild(s);
+            });
+        }
+
+        async function ensureThreeLibs() {
+            if (typeof THREE === 'undefined') {
+                await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js');
+            }
+            if (typeof THREE === 'undefined') {
+                throw new Error('Three.js library failed to load (check internet / CDN block).');
+            }
+            if (typeof THREE.OrbitControls === 'undefined') {
+                try {
+                    await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js');
+                } catch (e) {
+                    await loadScript('https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js');
+                }
+            }
+            if (typeof THREE.MTLLoader === 'undefined') {
+                try {
+                    await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js');
+                } catch (e) {
+                    await loadScript('https://unpkg.com/three@0.128.0/examples/js/loaders/MTLLoader.js');
+                }
+            }
+            if (typeof THREE.OBJLoader === 'undefined') {
+                try {
+                    await loadScript('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js');
+                } catch (e) {
+                    await loadScript('https://unpkg.com/three@0.128.0/examples/js/loaders/OBJLoader.js');
+                }
+            }
+            if (typeof THREE.OrbitControls === 'undefined' || typeof THREE.OBJLoader === 'undefined' || typeof THREE.MTLLoader === 'undefined') {
+                throw new Error('OrbitControls / MTLLoader / OBJLoader failed to load from CDN.');
+            }
+        }
+
+        // Boot after libs ready
+        parseQueryParams();
+        setupLanguageUI();
+        ensureThreeLibs()
+            .then(() => {
+                init();
+                animate();
+            })
+            .catch((err) => {
+                console.error(err);
+                showFatalError(String(err.message || err));
+            });
+
+        // Parse query string parameters passed from Streamlit
+        function parseQueryParams() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('sn')) data.sn = params.get('sn');
+            if (params.has('device_id')) data.device_id = params.get('device_id');
+            if (params.has('grid')) data.grid = params.get('grid');
+            if (params.has('temp')) data.temp = parseFloat(params.get('temp'));
+            if (params.has('irrad')) data.irrad = parseFloat(params.get('irrad'));
+            if (params.has('module_temp')) data.module_temp = parseFloat(params.get('module_temp'));
+            if (params.has('power')) data.power = parseFloat(params.get('power'));
+            if (params.has('dc_power')) data.dc_power = parseFloat(params.get('dc_power'));
+            if (params.has('e_today')) data.e_today = parseFloat(params.get('e_today'));
+            if (params.has('e_total')) data.e_total = parseFloat(params.get('e_total'));
+            if (params.has('model')) data.modelKey = params.get('model');
+            if (params.has('rated')) data.rated = parseFloat(params.get('rated'));
+            if (params.has('hour')) data.hour = parseFloat(params.get('hour'));
+            if (params.has('lang')) data.lang = params.get('lang');
+            // Default: if inside iframe treat as embedded unless embedded=0
+            if (params.has('embedded')) {
+                isEmbedded = params.get('embedded') === '1' || params.get('embedded') === 'true';
+            } else {
+                try {
+                    isEmbedded = window.self !== window.top;
+                } catch (e) {
+                    isEmbedded = true;
+                }
+            }
+            // Keep spinning in both preview and full screen
+            autoRotate = true;
+
+            // Compact glass UI when embedded (Streamlit) or phone
+            try {
+                document.body.classList.toggle('embedded', !!isEmbedded);
+            } catch (e) { /* ignore */ }
+
+            // Update UI — Inverter2501221272 live fields
+            const set = (id, text) => {
+                const el = document.getElementById(id);
+                if (el) el.innerText = text;
+            };
+            set('val-sn', data.sn || '2501221272');
+            set('val-device-id', data.device_id || '—');
+            set('val-grid', data.grid || '—');
+            set('val-ambient', `${Number(data.temp).toFixed(1)} °C`);
+            set('val-surface', `${Number(data.module_temp).toFixed(1)} °C`);
+            set('val-power', `${Number(data.power).toFixed(2)} kW`);
+            set('val-dc-power', `${Number(data.dc_power || 0).toFixed(2)} kW`);
+            set('val-e-today', `${Number(data.e_today || 0).toFixed(1)} kWh`);
+            set('val-rated', `${Number(data.rated || 25).toFixed(0)} kW`);
+
+            // Load % of rated (was temp-loss; more useful for inverter)
+            const rated = Number(data.rated) || 25;
+            const loadPct = rated > 0 ? (Number(data.power) / rated) * 100 : 0;
+            set('val-loss', `${loadPct.toFixed(1)}%`);
+            const lossEl = document.getElementById('val-loss');
+            if (lossEl) {
+                lossEl.className = loadPct > 80 ? 'data-value warning-value' : 'data-value highlight-value';
+            }
+
+            // Document title
+            document.title = `Solarman ${data.sn} — 3D`;
+
+            // Sync HTML time slider
+            const slider = document.getElementById('time-slider');
+            if (slider) {
+                slider.value = data.hour;
+                // Light hour only useful in full mode; keep enabled but label already says "scene light"
+                slider.disabled = false;
+            }
+            updateTimeUI(data.hour);
+            applyControlMode();
+        }
+
+        // Set up English vs Kazakh UI elements
+        function setupLanguageUI() {
+            const elementsEN = document.querySelectorAll('.lang-en');
+            const elementsKK = document.querySelectorAll('.lang-kk');
+            
+            if (data.lang === 'kk') {
+                elementsEN.forEach(el => el.style.display = 'none');
+                elementsKK.forEach(el => el.style.display = 'inline');
+            } else {
+                elementsEN.forEach(el => el.style.display = 'inline');
+                elementsKK.forEach(el => el.style.display = 'none');
+            }
+        }
+
+        function updateTimeUI(hourVal) {
+            const hrs = Math.floor(hourVal);
+            const mins = (hourVal % 1 === 0.5) ? '30' : '00';
+            document.getElementById('val-time').innerText = `${hrs}:${mins}`;
+        }
+
+        // Three.js Scene Setup
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // 1. Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f19);
+            scene.fog = new THREE.FogExp2(0x0b0f19, 0.015);
+
+            // 2. Camera - Zoomed out slightly to avoid model looking too large
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(14, 10, 14);
+
+            // 3. Renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            // Correct color space so PNG panel texture is not washed / dull
+            if (renderer.outputEncoding !== undefined) {
+                renderer.outputEncoding = THREE.sRGBEncoding;
+            }
+            if (renderer.physicallyCorrectLights !== undefined) {
+                renderer.physicallyCorrectLights = true;
+            }
+            container.appendChild(renderer.domElement);
+
+            // 4. Controls — orbit only in full-screen tab (not Streamlit embed)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.02;
+            controls.minDistance = 2;
+            controls.maxDistance = 40;
+            controls.autoRotateSpeed = 1.0; // gentle continuous spin
+            applyControlMode();
+
+            // Brighter ambient so textured mesh reads on dark bg (still matte, no glitter)
+            ambientLight = new THREE.AmbientLight(0xd0d8e4, 0.95);
+            scene.add(ambientLight);
+
+            const fillLight = new THREE.DirectionalLight(0xb8c8d8, 0.5);
+            fillLight.position.set(-8, 6, -10);
+            scene.add(fillLight);
+
+            const hemi = new THREE.HemisphereLight(0xe8f0ff, 0x3a3a4a, 0.55);
+            scene.add(hemi);
+
+            // Mild sun (high intensity + metalness caused the shine)
+            sunLight = new THREE.DirectionalLight(0xfff5eb, 0.7);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.bias = -0.0005;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 50;
+            
+            const d = 15;
+            sunLight.shadow.camera.left = -d;
+            sunLight.shadow.camera.right = d;
+            sunLight.shadow.camera.top = d;
+            sunLight.shadow.camera.bottom = -d;
+            scene.add(sunLight);
+
+            // Sun Visualizer Sphere
+            const sunGeometry = new THREE.SphereGeometry(0.3, 16, 16);
+            const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffe066 });
+            sunSphere = new THREE.Mesh(sunGeometry, sunMaterial);
+            scene.add(sunSphere);
+
+            // Update Sun Position
+            updateSunPosition(data.hour);
+
+            // 6. Ground Helper Grid
+            const gridHelper = new THREE.GridHelper(50, 50, 0x1f6feb, 0x1f2937);
+            gridHelper.position.y = -0.05;
+            scene.add(gridHelper);
+
+            // Add simple dark ground plane
+            const groundGeo = new THREE.PlaneGeometry(100, 100);
+            const groundMat = new THREE.MeshStandardMaterial({
+                color: 0x111827,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.1;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // 7. Load OBJ Models
+            mainGroup = new THREE.Group();
+            scene.add(mainGroup);
+
+            loadAllOBJModels();
+
+            // Resize listener
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // Adjust directional light (sun) based on hour (6:00 to 18:00)
+        function updateSunPosition(hour) {
+            const angleRad = Math.PI * (1 - (hour - 6) / 12);
+            
+            const radius = 22;
+            const x = radius * Math.cos(angleRad);
+            const y = radius * Math.sin(angleRad);
+            const z = 4; // Constant offset
+
+            sunLight.position.set(x, y, z);
+            sunSphere.position.set(x, y, z);
+
+            const elevation = Math.sin(angleRad);
+            if (elevation <= 0) {
+                sunLight.intensity = 0.12;
+                sunLight.color.setHex(0x58a6ff); // Moonlight
+                ambientLight.intensity = 0.55;
+                sunMaterialColor(0x388bfd);
+            } else {
+                sunLight.intensity = 0.25 + elevation * 0.4;
+                ambientLight.intensity = 0.7 + (elevation * 0.1);
+                const colorVal = new THREE.Color();
+                if (hour < 8 || hour > 16) {
+                    colorVal.setHSL(0.06, 1.0, 0.65); // Warm sunset/sunrise orange
+                } else {
+                    colorVal.setHSL(0.1, 0.3, 0.95);  // Bright noon white
+                }
+                sunLight.color.copy(colorVal);
+                sunSphere.material.color.copy(colorVal);
+            }
+        }
+
+        function sunMaterialColor(hex) {
+            if (sunSphere && sunSphere.material) {
+                sunSphere.material.color.setHex(hex);
+            }
+        }
+
+        function onTimeSliderChange(val) {
+            const hour = parseFloat(val);
+            data.hour = hour;
+            updateTimeUI(hour);
+            updateSunPosition(hour);
+        }
+
+        function applyControlMode() {
+            if (!controls) return;
+
+            // Paper-thin Meshy (2411046235): never auto-spin — spin always goes edge-on
+            if (lockTopDownView) {
+                controls.autoRotate = false;
+                autoRotate = false;
+                controls.autoRotateSpeed = 0;
+                controls.minPolarAngle = 0.0;
+                controls.maxPolarAngle = Math.PI * 0.28;
+                const chk = document.getElementById('chk-rotate');
+                if (chk) {
+                    chk.checked = false;
+                    chk.disabled = true;
+                }
+                if (isEmbedded) {
+                    // Allow slight orbit near top so user can inspect texture
+                    controls.enableRotate = true;
+                    controls.enablePan = false;
+                    controls.enableZoom = true;
+                    const panel = document.getElementById('control-panel');
+                    if (panel) {
+                        let note = document.getElementById('embed-lock-note');
+                        if (!note) {
+                            note = document.createElement('div');
+                            note.id = 'embed-lock-note';
+                            note.style.cssText = 'margin-top:12px;font-size:0.8rem;color:#8bdc8b;line-height:1.35;';
+                            panel.appendChild(note);
+                        }
+                        note.innerHTML = data.lang === 'kk'
+                            ? 'Жоғарыдан көрініс (жалпақ Meshy панель).<br><b>3D толық экран</b> — зум/сәл бұру.'
+                            : 'Top-down view (flat Meshy panel).<br><b>Full screen</b> — zoom / slight orbit.';
+                    }
+                } else {
+                    controls.enableRotate = true;
+                    controls.enablePan = true;
+                    controls.enableZoom = true;
+                }
+                if (renderer && renderer.domElement) {
+                    renderer.domElement.style.cursor = 'grab';
+                    renderer.domElement.style.pointerEvents = 'auto';
+                }
+                controls.update();
+                return;
+            }
+
+            // Default: keep spinning for boxy primary inverter
+            controls.autoRotate = true;
+            autoRotate = true;
+            controls.autoRotateSpeed = 1.0;
+
+            const chk = document.getElementById('chk-rotate');
+            if (chk) {
+                chk.checked = true;
+                chk.disabled = isEmbedded;
+            }
+
+            if (isEmbedded) {
+                controls.enableRotate = false;
+                controls.enablePan = false;
+                controls.enableZoom = false;
+                const panel = document.getElementById('control-panel');
+                if (panel) {
+                    let note = document.getElementById('embed-lock-note');
+                    if (!note) {
+                        note = document.createElement('div');
+                        note.id = 'embed-lock-note';
+                        note.style.cssText = 'margin-top:12px;font-size:0.8rem;color:#8bdc8b;line-height:1.35;';
+                        panel.appendChild(note);
+                    }
+                    note.innerHTML = data.lang === 'kk'
+                        ? 'Модель автоматты айналады.<br><b>3D толық экран</b> — қолмен бұру/зум.'
+                        : 'Model auto-rotates.<br><b>Full screen</b> — manual orbit/zoom.';
+                }
+                if (renderer && renderer.domElement) {
+                    renderer.domElement.style.cursor = 'default';
+                    renderer.domElement.style.pointerEvents = 'auto';
+                }
+            } else {
+                controls.enableRotate = true;
+                controls.enablePan = true;
+                controls.enableZoom = true;
+                if (renderer && renderer.domElement) {
+                    renderer.domElement.style.cursor = 'grab';
+                    renderer.domElement.style.pointerEvents = 'auto';
+                }
+            }
+            controls.update();
+        }
+
+        function toggleAutoRotate(checked) {
+            if (lockTopDownView) {
+                autoRotate = false;
+                if (controls) controls.autoRotate = false;
+                const chk = document.getElementById('chk-rotate');
+                if (chk) chk.checked = false;
+                return;
+            }
+            if (isEmbedded) {
+                autoRotate = true;
+                if (controls) controls.autoRotate = true;
+                const chk = document.getElementById('chk-rotate');
+                if (chk) chk.checked = true;
+                return;
+            }
+            autoRotate = checked;
+            if (controls) controls.autoRotate = autoRotate;
+        }
+
+        // Absolute URL for models next to this HTML page
+        function modelUrl(relPath) {
+            try {
+                return new URL(relPath, window.location.href).href;
+            } catch (e) {
+                return relPath;
+            }
+        }
+
+        function hideLoadingScreen() {
+            const loadingScreen = document.getElementById('loading-screen');
+            if (!loadingScreen) return;
+            loadingScreen.style.opacity = 0;
+            setTimeout(() => { loadingScreen.style.display = 'none'; }, 400);
+        }
+
+        /**
+         * Map Solarman SN / model query → static folder.
+         *  - 2501221272 → models/inverter/          (first Meshy panel)
+         *  - 2411046235 → models/inverter_2411046235/ (second Meshy panel)
+         */
+        function resolveInverterModelDir() {
+            const sn = String(data.sn || '');
+            const key = String(data.modelKey || '').toLowerCase();
+            if (
+                key.includes('2411046235') ||
+                key === 'inverter2' ||
+                key === 'second' ||
+                sn.includes('2411046235')
+            ) {
+                // Meshy_AI__0722080659 — baked +90°X +180°Z; open looking at the face
+                return {
+                    rel: 'models/inverter_2411046235/',
+                    label: 'Inverter2411046235',
+                    orient: [0, 0, 0],
+                    thicken: null,
+                    autoUpright: false,
+                    topDown: false,
+                    // On site open: look at panel FRONT (back was +Z — flip to -Z)
+                    faceCamera: '-z',
+                    cameraElevation: 0.28,
+                    doubleSide: true,
+                    flipY: true,
+                    forceStandardMap: true,
+                    useMtl: false,
+                    mtlFile: 'inverter.mtl',
+                    objFile: 'inverter.obj',
+                    autoRotate: true,
+                    ambientBoost: 1.25,
+                };
+            }
+            return {
+                rel: 'models/inverter/',
+                label: 'Inverter2501221272',
+                orient: [0, 0, 0],
+                autoUpright: false,
+                faceCamera: 'z',
+                cameraElevation: 0.28,
+                doubleSide: true,
+                flipY: true,
+                useMtl: false,
+                mtlFile: 'inverter.mtl',
+                objFile: 'inverter.obj',
+                autoRotate: true,
+            };
+        }
+
+        /**
+         * Fix texture sampling for Meshy UV atlases (not tiling materials).
+         */
+        function configureMapTexture(tex, resolved, isColor) {
+            if (!tex) return tex;
+            // Atlas UVs live in 0–1 — Clamp, not Repeat (Repeat shifts/seams look “wrong”)
+            tex.wrapS = THREE.ClampToEdgeWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
+            const flip = resolved && typeof resolved.flipY === 'boolean' ? resolved.flipY : true;
+            tex.flipY = flip;
+            if (isColor && tex.encoding !== undefined) {
+                tex.encoding = THREE.sRGBEncoding;
+            }
+            if (renderer) {
+                tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+            }
+            tex.needsUpdate = true;
+            return tex;
+        }
+
+        /**
+         * Align flat Meshy panel to same convention as Inverter2501221272:
+         *   X = long axis, Y = height, Z = thin depth (face roughly toward camera/Z).
+         * Only rotates the Object3D — UV attributes stay intact.
+         */
+        function autoUprightFlatPanel(obj) {
+            obj.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(obj);
+            if (box.isEmpty()) return;
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const dims = [
+                { axis: 'x', v: size.x },
+                { axis: 'y', v: size.y },
+                { axis: 'z', v: size.z },
+            ].sort((a, b) => a.v - b.v);
+            const thin = dims[0];
+            const longA = dims[2];
+            if (thin.v / longA.v > 0.35) return; // not a flat panel
+
+            // Target: thinnest → Z (depth), longest → X, mid → Y (height)
+            // Meshy 2411046235 is typically longest X, thinnest Y (lying flat on XZ).
+            if (thin.axis === 'y' && longA.axis === 'x') {
+                // Pitch +90° around X: (x,y,z) → (x, -z, y)
+                // Former +Y face (texture top) becomes +Z → toward camera
+                obj.rotation.x += Math.PI / 2;
+            } else if (thin.axis === 'y' && longA.axis === 'z') {
+                obj.rotation.y += Math.PI / 2;
+                obj.rotation.x += Math.PI / 2;
+            } else if (thin.axis === 'x') {
+                obj.rotation.z -= Math.PI / 2;
+                obj.rotation.x += Math.PI / 2;
+            }
+            // thin.axis === 'z' already matches primary convention
+            obj.updateMatrixWorld(true);
+        }
+
+        /**
+         * Load Solarman inverter Meshy textured OBJ + PBR maps.
+         * Path depends on SN / model= query (see resolveInverterModelDir).
+         */
+        function loadAllOBJModels() {
+            const resolved = resolveInverterModelDir();
+            // Must set before applyControlMode / spin — flat panel must stay top-down
+            lockTopDownView = !!(resolved.topDown);
+            if (lockTopDownView) {
+                autoRotate = false;
+                if (controls) applyControlMode();
+            }
+            const basePath = modelUrl(resolved.rel);
+            const mtlBase = basePath.endsWith('/') ? basePath : basePath + '/';
+            const label = resolved.label;
+            const msgEl = document.getElementById('loading-msg');
+
+            const setMsg = (en, kk) => {
+                if (!msgEl) return;
+                msgEl.innerText = (data.lang === 'kk') ? kk : en;
+            };
+
+            setMsg(
+                'Loading Solarman ' + label + ' + textures...',
+                'Solarman ' + label + ' + текстуралар жүктелуде...'
+            );
+
+            // Large Meshy OBJs (solar tracker ~45MB) need a longer budget
+            const loadTimeoutMs = resolved.label && resolved.label.includes('2411046235')
+                ? 300000
+                : 120000;
+            const timeoutId = setTimeout(() => {
+                showFatalError(
+                    data.lang === 'kk'
+                        ? 'Inverter моделі уақытында жүктелмеді.\n' + mtlBase
+                        : 'Inverter model timed out.\n' + mtlBase
+                );
+            }, loadTimeoutMs);
+
+            const finishObject = (obj) => {
+                setMsg('Applying textures...', 'Текстуралар қолданылуда...');
+                obj.name = label;
+                obj.userData.modelIndex = resolved.rel;
+                obj.userData.resolved = resolved;
+
+                const o = resolved.orient || [0, 0, 0];
+                obj.rotation.set(o[0] || 0, o[1] || 0, o[2] || 0);
+                if (resolved.autoUpright) {
+                    autoUprightFlatPanel(obj);
+                }
+                // Paper-thin Meshy panels: boost local axes before fit (UVs on top face stay ok)
+                if (resolved.thicken && resolved.thicken.length === 3) {
+                    obj.scale.set(
+                        resolved.thicken[0] || 1,
+                        resolved.thicken[1] || 1,
+                        resolved.thicken[2] || 1
+                    );
+                }
+
+                loadedModels[0] = obj;
+                mainGroup.add(obj);
+                centerAndScaleModel(resolved);
+
+                // Normalize any MTL-applied maps, then fill missing albedo
+                fixMaterialsFromMtl(obj, resolved);
+                enhanceInverterMaterials(obj, mtlBase, resolved)
+                    .then(() => {
+                        clearTimeout(timeoutId);
+                        applyMaterials();
+                        // Re-fit camera after materials (some loaders nudge bounds)
+                        centerAndScaleModel(resolved);
+                        hideLoadingScreen();
+                        console.log(label + ' loaded from', mtlBase, 'flipY=', resolved.flipY);
+                    })
+                    .catch((e) => {
+                        clearTimeout(timeoutId);
+                        console.warn('Texture enhance partial fail', e);
+                        applyMaterials();
+                        centerAndScaleModel(resolved);
+                        hideLoadingScreen();
+                    });
+            };
+
+            const loadObjOnly = () => {
+                const objLoader = new THREE.OBJLoader();
+                objLoader.setPath(mtlBase);
+                objLoader.load(
+                    resolved.objFile || 'inverter.obj',
+                    finishObject,
+                    (xhr) => {
+                        if (xhr && xhr.total) {
+                            const pct = Math.round((xhr.loaded / xhr.total) * 100);
+                            setMsg(
+                                `Loading ${label} OBJ: ${pct}%`,
+                                `${label} OBJ: ${pct}%`
+                            );
+                        }
+                    },
+                    (err) => {
+                        clearTimeout(timeoutId);
+                        console.error(err);
+                        showFatalError(
+                            'Failed to load inverter.obj\n' + mtlBase + (resolved.objFile || 'inverter.obj') + '\n' + err
+                        );
+                    }
+                );
+            };
+
+            // Prefer MTL+OBJ so map_Kd / Material.003 UVs bind as exported by Meshy
+            if (resolved.useMtl && typeof THREE.MTLLoader !== 'undefined') {
+                const mtlLoader = new THREE.MTLLoader();
+                mtlLoader.setPath(mtlBase);
+                mtlLoader.load(
+                    resolved.mtlFile || 'inverter.mtl',
+                    (materials) => {
+                        try {
+                            materials.preload();
+                        } catch (e) { /* ok */ }
+                        const objLoader = new THREE.OBJLoader();
+                        objLoader.setPath(mtlBase);
+                        objLoader.setMaterials(materials);
+                        objLoader.load(
+                            resolved.objFile || 'inverter.obj',
+                            finishObject,
+                            (xhr) => {
+                                if (xhr && xhr.total) {
+                                    const pct = Math.round((xhr.loaded / xhr.total) * 100);
+                                    setMsg(
+                                        `Loading ${label} OBJ: ${pct}%`,
+                                        `${label} OBJ: ${pct}%`
+                                    );
+                                }
+                            },
+                            (err) => {
+                                console.warn('MTL path OBJ failed, fallback bare OBJ', err);
+                                loadObjOnly();
+                            }
+                        );
+                    },
+                    undefined,
+                    (err) => {
+                        console.warn('MTL load failed, fallback bare OBJ', err);
+                        loadObjOnly();
+                    }
+                );
+            } else {
+                loadObjOnly();
+            }
+        }
+
+        /**
+         * After MTLLoader: fix wrap/flipY on maps so UV atlas lines up.
+         */
+        function fixMaterialsFromMtl(root, resolved) {
+            root.traverse((child) => {
+                if (!child.isMesh || !child.material) return;
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach((mat) => {
+                    if (!mat) return;
+                    if (mat.map) configureMapTexture(mat.map, resolved, true);
+                    if (mat.normalMap) configureMapTexture(mat.normalMap, resolved, false);
+                    if (mat.aoMap) configureMapTexture(mat.aoMap, resolved, false);
+                    // MTL Phong → upgrade readable PBR-ish without losing map
+                    if (mat.map) {
+                        mat.color = new THREE.Color(0xffffff);
+                        if (mat.side !== undefined) {
+                            mat.side = resolved.doubleSide !== false ? THREE.DoubleSide : THREE.FrontSide;
+                        }
+                        mat.needsUpdate = true;
+                    }
+                    child.userData.standardMaterial = mat;
+                });
+                child.castShadow = true;
+                child.receiveShadow = true;
+            });
+        }
+
+        /**
+         * Load a texture only when the image is fully available (no premature needsUpdate).
+         */
+        function loadTexAsync(loader, url, sRGB, resolved) {
+            return new Promise((resolve) => {
+                loader.load(
+                    url,
+                    (tex) => {
+                        configureMapTexture(tex, resolved || { flipY: true }, !!sRGB);
+                        resolve(tex);
+                    },
+                    undefined,
+                    (err) => {
+                        console.warn('Texture failed:', url, err);
+                        resolve(null);
+                    }
+                );
+            });
+        }
+
+        async function enhanceInverterMaterials(root, mtlBase, resolved) {
+            const loader = new THREE.TextureLoader();
+            try {
+                loader.setCrossOrigin('anonymous');
+            } catch (e) { /* r128 may ignore */ }
+
+            const base = mtlBase.endsWith('/') ? mtlBase : mtlBase + '/';
+            const useDouble = !resolved || resolved.doubleSide !== false;
+            const forceMap = !!(resolved && resolved.forceStandardMap);
+
+            // If MTL already applied a working map, only fill missing maps / convert materials
+            let hasMap = false;
+            root.traverse((c) => {
+                if (c.isMesh && c.material) {
+                    const m = Array.isArray(c.material) ? c.material[0] : c.material;
+                    if (m && m.map && m.map.image) hasMap = true;
+                }
+            });
+
+            // Hard cache-bust: page query v= + fixed rev (bump when texture file changes)
+            const pageV = (typeof URLSearchParams !== 'undefined')
+                ? (new URLSearchParams(window.location.search).get('v') || '')
+                : '';
+            const texRev = '20260722d'; // bump this string whenever texture_basecolor.png is replaced
+            const albedoUrl = base + 'texture_basecolor.png?v=' + encodeURIComponent(texRev + '_' + pageV);
+
+            // Always (re)load albedo when forceStandardMap — reliable UV atlas for 2nd unit
+            const [mapColor, mapNormal, mapAO] = await Promise.all([
+                (hasMap && !forceMap)
+                    ? Promise.resolve(null)
+                    : loadTexAsync(loader, albedoUrl, true, resolved),
+                loadTexAsync(loader, base + 'texture_normal.png', false, resolved),
+                loadTexAsync(loader, base + 'texture_ao.png', false, resolved),
+            ]);
+
+            if (hasMap && !forceMap) {
+                fixMaterialsFromMtl(root, resolved);
+            }
+
+            // Soft ambient boost for dark Meshy atlases
+            if (resolved && resolved.ambientBoost && ambientLight) {
+                ambientLight.intensity = Math.min(1.6, 0.95 * resolved.ambientBoost);
+            }
+
+            root.traverse((child) => {
+                if (!child.isMesh) return;
+                child.castShadow = true;
+                child.receiveShadow = true;
+
+                // Fix inverted / missing normals on thin Meshy exports
+                if (child.geometry) {
+                    if (!child.geometry.attributes.normal) {
+                        child.geometry.computeVertexNormals();
+                    }
+                }
+
+                const existing = Array.isArray(child.material) ? child.material[0] : child.material;
+                const alreadyTextured = existing && existing.map && existing.map.image;
+
+                // Keep MTL materials when they already have the albedo atlas (unless forced)
+                if (alreadyTextured && !mapColor && !forceMap) {
+                    if (mapNormal) {
+                        existing.normalMap = mapNormal;
+                        existing.normalScale = new THREE.Vector2(0.35, 0.35);
+                    }
+                    if (mapAO) {
+                        existing.aoMap = mapAO;
+                        existing.aoMapIntensity = 0.55;
+                    }
+                    existing.side = useDouble ? THREE.DoubleSide : THREE.FrontSide;
+                    existing.needsUpdate = true;
+                    child.userData.standardMaterial = existing;
+                    if (
+                        mapAO &&
+                        child.geometry &&
+                        child.geometry.attributes.uv &&
+                        !child.geometry.attributes.uv2
+                    ) {
+                        child.geometry.setAttribute('uv2', child.geometry.attributes.uv);
+                    }
+                    return;
+                }
+
+                const matOpts = {
+                    color: 0xffffff,
+                    metalness: 0.02,
+                    roughness: 0.78,
+                    envMapIntensity: 0.0,
+                    flatShading: false,
+                    side: useDouble ? THREE.DoubleSide : THREE.FrontSide,
+                };
+
+                if (mapColor) {
+                    matOpts.map = mapColor;
+                } else if (alreadyTextured) {
+                    matOpts.map = existing.map;
+                    configureMapTexture(existing.map, resolved, true);
+                } else {
+                    matOpts.color = 0xb0b8c0;
+                }
+                if (mapNormal) {
+                    matOpts.normalMap = mapNormal;
+                    matOpts.normalScale = new THREE.Vector2(0.35, 0.35);
+                }
+                if (mapAO) {
+                    matOpts.aoMap = mapAO;
+                    matOpts.aoMapIntensity = 0.55;
+                }
+
+                const mat = new THREE.MeshStandardMaterial(matOpts);
+
+                if (
+                    (mapAO || matOpts.map) &&
+                    child.geometry &&
+                    child.geometry.attributes.uv &&
+                    !child.geometry.attributes.uv2
+                ) {
+                    child.geometry.setAttribute('uv2', child.geometry.attributes.uv);
+                }
+
+                child.userData.standardMaterial = mat;
+                child.material = mat;
+            });
+
+            const ok = [mapColor || hasMap, mapNormal, mapAO].filter(Boolean).length;
+            console.log('Inverter textures ready:', ok + ' maps, mtlHadMap=', hasMap, 'force=', forceMap, 'from', base);
+        }
+
+        function centerAndScaleModel(resolved) {
+            if (!mainGroup || mainGroup.children.length === 0) return;
+
+            resolved = resolved || (loadedModels[0] && loadedModels[0].userData.resolved) || {};
+
+            // Reset group transform only — keep child orient/thicken
+            mainGroup.position.set(0, 0, 0);
+            mainGroup.scale.set(1, 1, 1);
+            mainGroup.rotation.set(0, 0, 0);
+            mainGroup.updateMatrixWorld(true);
+
+            const box = new THREE.Box3().setFromObject(mainGroup);
+            if (!isFinite(box.min.x) || box.isEmpty()) return;
+
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            mainGroup.position.sub(center);
+
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z, 1e-6);
+            const minDim = Math.min(size.x, size.y, size.z, maxDim);
+            const flatness = minDim / maxDim;
+
+            let targetSize = isEmbedded ? 8.4 : 7.6;
+            if (resolved.topDown || flatness < 0.25) {
+                targetSize = isEmbedded ? 10.5 : 9.5;
+            }
+            const scaleFactor = targetSize / maxDim;
+            mainGroup.scale.set(scaleFactor, scaleFactor, scaleFactor);
+            mainGroup.updateMatrixWorld(true);
+
+            const updatedBox = new THREE.Box3().setFromObject(mainGroup);
+            mainGroup.position.y -= updatedBox.min.y;
+            mainGroup.updateMatrixWorld(true);
+
+            const finalBox = new THREE.Box3().setFromObject(mainGroup);
+            const finalCenter = new THREE.Vector3();
+            finalBox.getCenter(finalCenter);
+            // Aim slightly above base so model sits centered in frame
+            finalCenter.y += (finalBox.max.y - finalBox.min.y) * 0.4;
+            const finalSize = new THREE.Vector3();
+            finalBox.getSize(finalSize);
+
+            // Frame using the face we look at (width × height for front view)
+            const faceAxis = (resolved.faceCamera || '').toString().toLowerCase();
+            const wantFace =
+                faceAxis === 'z' ||
+                faceAxis === 'x' ||
+                faceAxis === '-z' ||
+                faceAxis === '-x' ||
+                faceAxis === 'y' ||
+                faceAxis === true ||
+                faceAxis === '1';
+
+            let frameW = Math.max(finalSize.x, finalSize.y, finalSize.z, 0.1);
+            if (faceAxis === 'z' || faceAxis === '-z') {
+                frameW = Math.max(finalSize.x, finalSize.y, 0.1);
+            } else if (faceAxis === 'x' || faceAxis === '-x') {
+                frameW = Math.max(finalSize.z, finalSize.y, 0.1);
+            } else if (faceAxis === 'y' || resolved.topDown) {
+                frameW = Math.max(finalSize.x, finalSize.z, 0.1);
+            }
+
+            const maxFinal = wantFace || resolved.topDown
+                ? frameW
+                : Math.max(finalSize.x, finalSize.y, finalSize.z, 0.1);
+
+            const fovRad = camera.fov * (Math.PI / 180);
+            const pad = wantFace
+                ? (isEmbedded ? 1.05 : 1.12)
+                : (resolved.topDown
+                    ? (isEmbedded ? 1.12 : 1.2)
+                    : (isEmbedded ? 0.88 : 0.98));
+            const cameraDistance = (maxFinal / 2) / Math.tan(fovRad / 2) * pad;
+            const elev =
+                typeof resolved.cameraElevation === 'number'
+                    ? resolved.cameraElevation
+                    : 0.28;
+
+            // Prefer explicit face-on (site open looks at the model)
+            if (wantFace && !resolved.topDown) {
+                lockTopDownView = false;
+                const d = cameraDistance;
+                const lift = d * elev;
+                if (faceAxis === 'z' || faceAxis === true || faceAxis === '1') {
+                    // Front: look along −Z toward model face
+                    camera.position.set(
+                        finalCenter.x,
+                        finalCenter.y + lift,
+                        finalCenter.z + d
+                    );
+                } else if (faceAxis === '-z') {
+                    camera.position.set(
+                        finalCenter.x,
+                        finalCenter.y + lift,
+                        finalCenter.z - d
+                    );
+                } else if (faceAxis === 'x') {
+                    camera.position.set(
+                        finalCenter.x + d,
+                        finalCenter.y + lift,
+                        finalCenter.z
+                    );
+                } else if (faceAxis === '-x') {
+                    camera.position.set(
+                        finalCenter.x - d,
+                        finalCenter.y + lift,
+                        finalCenter.z
+                    );
+                } else if (faceAxis === 'y') {
+                    camera.position.set(
+                        finalCenter.x + d * 0.05,
+                        finalCenter.y + d,
+                        finalCenter.z + d * 0.05
+                    );
+                }
+                controls.maxPolarAngle = Math.PI / 2 - 0.02;
+                controls.minPolarAngle = 0.05;
+                // Gentle spin after face-on start so it stays readable
+                const spin = resolved.autoRotate !== false;
+                controls.autoRotate = spin;
+                autoRotate = spin;
+                controls.autoRotateSpeed = isEmbedded ? 0.7 : 0.55;
+            } else if (resolved.topDown) {
+                lockTopDownView = true;
+                camera.position.set(
+                    finalCenter.x + cameraDistance * 0.02,
+                    finalCenter.y + cameraDistance,
+                    finalCenter.z + cameraDistance * 0.02
+                );
+                controls.minPolarAngle = 0.0;
+                controls.maxPolarAngle = Math.PI * 0.28;
+                controls.autoRotate = false;
+                autoRotate = false;
+                controls.enableDamping = true;
+                applyControlMode();
+            } else {
+                // Classic 3/4 orbit start
+                const horiz = Math.sqrt(Math.max(0.05, 1 - elev * elev));
+                camera.position.set(
+                    finalCenter.x + cameraDistance * horiz * 0.72,
+                    finalCenter.y + cameraDistance * elev,
+                    finalCenter.z + cameraDistance * horiz * 0.72
+                );
+                controls.maxPolarAngle = Math.PI / 2 - 0.02;
+                controls.autoRotate = resolved.autoRotate !== false;
+                autoRotate = resolved.autoRotate !== false;
+                controls.autoRotateSpeed = isEmbedded ? 1.0 : 0.85;
+            }
+            camera.lookAt(finalCenter);
+            controls.target.copy(finalCenter);
+            controls.minDistance = cameraDistance * 0.08;
+            controls.maxDistance = cameraDistance * 6;
+            controls.update();
+        }
+
+        // Apply materials: Standard (Meshy textures) vs Thermal heatmap overlay
+        function applyMaterials() {
+            if (!mainGroup) return;
+
+            const getThermalColor = (tempVal) => {
+                const minTemp = 10;
+                const maxTemp = 70;
+                let ratio = (tempVal - minTemp) / (maxTemp - minTemp);
+                ratio = Math.max(0, Math.min(1, ratio));
+                const color = new THREE.Color();
+                if (ratio < 0.25) {
+                    color.setRGB(0, ratio * 4, 1);
+                } else if (ratio < 0.5) {
+                    color.setRGB(0, 1, 1 - (ratio - 0.25) * 4);
+                } else if (ratio < 0.75) {
+                    color.setRGB((ratio - 0.5) * 4, 1, 0);
+                } else {
+                    color.setRGB(1, 1 - (ratio - 0.75) * 4, 0);
+                }
+                return color;
+            };
+
+            const thermalColor = getThermalColor(data.module_temp);
+            let meshCount = 0;
+
+            mainGroup.traverse((child) => {
+                if (!child.isMesh) return;
+                meshCount++;
+                child.castShadow = true;
+                child.receiveShadow = true;
+
+                if (viewMode === 'thermal') {
+                    // Keep base texture, tint + emissive by temperature
+                    const base = child.userData.standardMaterial || child.material;
+                    const thermalMat = (base && base.clone) ? base.clone() : new THREE.MeshStandardMaterial();
+                    thermalMat.color = thermalColor.clone();
+                    thermalMat.emissive = thermalColor.clone().multiplyScalar(0.22);
+                    thermalMat.emissiveIntensity = 0.35;
+                    // Dim albedo so heat color reads clearly
+                    if (thermalMat.map) {
+                        thermalMat.color.multiplyScalar(0.55);
+                    }
+                    child.material = thermalMat;
+                } else {
+                    if (child.userData.standardMaterial) {
+                        child.material = child.userData.standardMaterial;
+                    }
+                    // else keep MTL-assigned material
+                }
+            });
+
+            console.log(`Inverter materials mode=${viewMode}, meshes=${meshCount}, temp=${data.module_temp}`);
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            document.getElementById('btn-standard').classList.remove('active');
+            document.getElementById('btn-thermal').classList.remove('active');
+            
+            if (viewMode === 'standard') {
+                document.getElementById('btn-standard').classList.add('active');
+                document.getElementById('legend-container').style.display = 'none';
+            } else {
+                document.getElementById('btn-thermal').classList.add('active');
+                document.getElementById('legend-container').style.display = 'block';
+            }
+            
+            applyMaterials();
+        }
+
+        // Handle window resizing
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // Animation Loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Listen for message updates from parent window (Streamlit iframe communicator)
+        window.addEventListener('message', function(event) {
+            if (event.data && typeof event.data === 'object') {
+                const payload = event.data;
+                if (payload.type === 'update_telemetry') {
+                    if (payload.temp !== undefined) data.temp = payload.temp;
+                    if (payload.irrad !== undefined) data.irrad = payload.irrad;
+                    if (payload.module_temp !== undefined) data.module_temp = payload.module_temp;
+                    if (payload.power !== undefined) data.power = payload.power;
+                    if (payload.hour !== undefined) data.hour = payload.hour;
+                    if (payload.lang !== undefined) data.lang = payload.lang;
+                    
+                    parseQueryParams();
+                    setupLanguageUI();
+                    applyMaterials();
+                    updateSunPosition(data.hour);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

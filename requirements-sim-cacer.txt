@@ -1,0 +1,12 @@
+# Optional P4 / advanced course stack (NOT used by production Docker).
+# Install:
+#   pip install -r requirements-sim-cacer.txt
+# or:
+#   pip install -e ".[sim-cacer]"
+#
+# Explicitly excluded (CACER full Windows workflow):
+#   xlwings, pywin32, playwright, openpyxl-driven market Excel paths
+
+pvlib>=0.10.0
+pandapower>=2.14.0
+numpy-financial>=1.0.0

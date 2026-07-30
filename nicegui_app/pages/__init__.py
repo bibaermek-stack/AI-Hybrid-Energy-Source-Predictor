@@ -1,0 +1,3 @@
+"""
+NiceGUI Web Pages Package.
+"""

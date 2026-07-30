@@ -1,5 +1,5 @@
 """
-EcoPredict AI - Root FastAPI Mobile & Cloud Backend.
+EcoPredict AI - FastAPI Mobile & Cloud Backend.
 Reads DATABASE_URL from environment variables for PostgreSQL on Railway.
 """
 
@@ -8,21 +8,18 @@ import os
 import sys
 from pathlib import Path
 
-# Add project root and EcoPredict AI subfolder to Python path
-_ROOT = Path(__file__).resolve().parent
-_SUB = _ROOT / "EcoPredict AI"
-if str(_SUB) not in sys.path and _SUB.exists():
-    sys.path.insert(0, str(_SUB))
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+# Add project directory to Python path
+_DIR = Path(__file__).resolve().parent
+if str(_DIR) not in sys.path:
+    sys.path.insert(0, str(_DIR))
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-# Logging setup
+# Setup logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("ecopredict-backend")
+logger = logging.getLogger("ecopredict-api")
 
 # Database URL configuration
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
@@ -45,11 +42,10 @@ else:
 
 app = FastAPI(
     title="EcoPredict AI Mobile & Cloud API",
-    description="FastAPI Backend for EcoPredict AI Mobile App & Streamlit/NiceGUI Dashboards",
+    description="FastAPI Backend for EcoPredict AI Mobile App & Dashboards",
     version="2.0.0",
 )
 
-# Enable CORS for Mobile & Web clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -76,16 +72,16 @@ async def health_check():
         "models_loaded": {"solar": True, "wind": True},
     }
 
-# Include API routes from EcoPredict AI
+# Include API routes
 try:
     from api.routes import router as api_router
     app.include_router(api_router)
     logger.info("API Router included successfully.")
 except Exception as err:
-    logger.warning("Could not include api_router directly: %s", err)
+    logger.warning("Could not include api_router: %s", err)
 
-# Serve static files if directory exists
-static_dir = _SUB / "static"
+# Serve static files
+static_dir = _DIR / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir), html=True), name="static")
 
