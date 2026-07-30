@@ -1,0 +1,22 @@
+services:
+  ecopredict:
+    build: .
+    image: ecopredict-ai:latest
+    container_name: ecopredict-ai
+    ports:
+      - "8080:8080"   # Streamlit (public)
+      - "8001:8001"   # FastAPI (optional direct access)
+    env_file:
+      - .env
+    environment:
+      PORT: "8080"
+      API_URL: "http://127.0.0.1:8001/predict"
+      HEALTH_URL: "http://127.0.0.1:8001/health"
+      FORECAST_URL: "http://127.0.0.1:8001/forecast-batch"
+      CHAT_URL: "http://127.0.0.1:8001/chat"
+      # WEATHERAPI_KEY, Solarman credentials — put in .env
+    volumes:
+      # Persist RAG DB and logs (optional in production)
+      - ./vector_db:/app/vector_db
+      - ./logs:/app/logs
+    restart: unless-stopped

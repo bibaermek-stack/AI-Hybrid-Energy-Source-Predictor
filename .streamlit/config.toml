@@ -1,0 +1,33 @@
+# EcoPredict AI — Streamlit config
+# Disables developer-only shortcuts like Clear cache (C key / dialog)
+
+[client]
+# "viewer" = no developer toolbar shortcuts (Clear cache dialog won't pop on C)
+toolbarMode = "viewer"
+showErrorDetails = "none"
+showSidebarNavigation = true
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = true
+runOnSave = false
+fileWatcherType = "none"
+enableCORS = false
+enableXsrfProtection = false
+enableWebsocketCompression = false
+# Serve dashboard/static at /app/static/ (3D viewer, same-origin on Railway)
+enableStaticServing = true
+
+[runner]
+fastReruns = true
+
+[theme]
+base = "dark"
+primaryColor = "#00E5FF"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#161B22"
+textColor = "#E6EDF3"
+font = "sans serif"
+

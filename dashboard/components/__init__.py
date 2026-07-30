@@ -1,0 +1,1 @@
+"""EcoPredict dashboard package."""

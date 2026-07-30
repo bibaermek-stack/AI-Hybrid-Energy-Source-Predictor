@@ -1,0 +1,165 @@
+{
+  "generated_from": [
+    "dashboard/app.py trainer summary",
+    "yolo_fault_detection/runs/runs/detect/train/results.csv",
+    "yolo_fault_detection/Train result.png",
+    "yolo_fault_detection/Test Result.png",
+    "notebooks / fault-detection / solar-power-generation-forecast"
+  ],
+  "solar_forecast": {
+    "random_forest": {
+      "r2": 0.9967,
+      "mae_kw": 227
+    },
+    "xgboost": {
+      "r2": 0.9971,
+      "mae_kw": 213
+    },
+    "lstm": {
+      "r2": 0.9137,
+      "mae_kw": 1336
+    }
+  },
+  "yolo11n_fault_detection": {
+    "best_epoch": 49,
+    "best": {
+      "precision": 0.926,
+      "recall": 0.836,
+      "mAP50": 0.972,
+      "mAP50_95": 0.95
+    },
+    "test_set_all": {
+      "images": 88,
+      "precision": 0.888,
+      "recall": 0.931,
+      "mAP50": 0.931,
+      "mAP50_95": 0.923
+    },
+    "classes": [
+      "Clean",
+      "Dust",
+      "Bird",
+      "Electrical",
+      "Physical",
+      "Snow"
+    ]
+  },
+  "cnn_notebooks_caveat": {
+    "note": "Superseded by cnn_improved retrain (probe + finetune).",
+    "legacy_resnet_notebook_eval": 0.1,
+    "legacy_vgg_notebook_eval": 0.2
+  },
+  "production_models": {
+    "solar_model_pkl": "RandomForestRegressor n_estimators=200 max_depth=10",
+    "wind_model_pkl": "XGBRegressor n_estimators=200 lr=0.05 max_depth=6",
+    "lstm": "Sequential LSTM(64)->Dropout->LSTM(32)->Dense(1), input (24,6)"
+  },
+  "cnn_improved": {
+    "resnet50_multiclass": {
+      "val_accuracy_pct": 60.0,
+      "precision_macro_pct": 34.45,
+      "recall_macro_pct": 37.22,
+      "f1_macro_pct": 35.06,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\resnet50_multiclass_probe.pt",
+      "n_train": 880,
+      "n_val": 220
+    },
+    "vgg16_multiclass": {
+      "val_accuracy_pct": 61.82,
+      "precision_macro_pct": 38.72,
+      "recall_macro_pct": 42.59,
+      "f1_macro_pct": 39.72,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\vgg16_multiclass_probe.pt",
+      "n_train": 880,
+      "n_val": 220
+    },
+    "resnet50_binary": {
+      "val_accuracy_pct": 80.94,
+      "precision_macro_pct": 80.95,
+      "recall_macro_pct": 80.94,
+      "f1_macro_pct": 80.94,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\resnet50_binary_probe.pt",
+      "n_train": 1280,
+      "n_val": 320
+    },
+    "vgg16_binary": {
+      "val_accuracy_pct": 78.44,
+      "precision_macro_pct": 76.74,
+      "recall_macro_pct": 76.56,
+      "f1_macro_pct": 76.52,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\vgg16_binary_probe.pt",
+      "n_train": 1280,
+      "n_val": 320
+    }
+  },
+  "elpv_cnn": {
+    "resnet50_binary": {
+      "val_accuracy_pct": 78.29,
+      "f1_macro_pct": 75.32,
+      "precision_macro_pct": 75.47,
+      "recall_macro_pct": 75.21,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\resnet50_elpv_binary.pt"
+    },
+    "vgg16_binary": {
+      "val_accuracy_pct": 79.81,
+      "f1_macro_pct": 76.38,
+      "precision_macro_pct": 76.43,
+      "recall_macro_pct": 76.33,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\vgg16_elpv_binary.pt"
+    },
+    "resnet50_severity": {
+      "val_accuracy_pct": 73.71,
+      "f1_macro_pct": 49.79,
+      "precision_macro_pct": 49.43,
+      "recall_macro_pct": 50.43,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\resnet50_elpv_severity.pt"
+    },
+    "vgg16_severity": {
+      "val_accuracy_pct": 75.05,
+      "f1_macro_pct": 52.84,
+      "precision_macro_pct": 51.56,
+      "recall_macro_pct": 55.39,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\vgg16_elpv_severity.pt"
+    },
+    "resnet50_binary_half": {
+      "val_accuracy_pct": 86.86,
+      "f1_macro_pct": 81.71,
+      "precision_macro_pct": 80.97,
+      "recall_macro_pct": 82.74,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\resnet50_elpv_binary_half.pt"
+    },
+    "vgg16_binary_half": {
+      "val_accuracy_pct": 85.33,
+      "f1_macro_pct": 79.98,
+      "precision_macro_pct": 79.29,
+      "recall_macro_pct": 80.96,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\vgg16_elpv_binary_half.pt"
+    },
+    "resnet50_binary_finetune": {
+      "val_accuracy_pct": 74.86,
+      "f1_macro_pct": 73.24,
+      "precision_macro_pct": 75.22,
+      "recall_macro_pct": 72.81,
+      "method": "partial_finetune",
+      "weights": "artifacts\\resnet50_elpv_binary_ft.pt"
+    },
+    "vgg16_binary_finetune": {
+      "val_accuracy_pct": 80.19,
+      "f1_macro_pct": 79.71,
+      "precision_macro_pct": 79.74,
+      "recall_macro_pct": 79.67,
+      "method": "partial_finetune",
+      "weights": "artifacts\\vgg16_elpv_binary_ft.pt"
+    }
+  }
+}

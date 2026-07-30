@@ -1,0 +1,83 @@
+# Git / IDE
+.git
+.github
+.gitignore
+.gitattributes
+.vscode
+.idea
+*.md
+!README.md
+
+# Python
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+*.egg-info
+.eggs
+dist
+build
+.venv
+venv
+.env
+.env.*
+!.env.example
+
+# Tests / coverage (not needed in runtime image)
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.tox
+
+# Notebooks (P4 electives run offline, not in production image)
+**/*.ipynb
+.ipynb_checkpoints
+notebooks/
+
+# Optional heavy third-party submodule (CACER tutorials / Italian case files)
+# Adapters live under src/simulation/community/ and do not need the submodule at runtime.
+third_party/CACER_Simulator/
+
+# Large data (mount or download at runtime if needed)
+dataset/
+Detect_solar_dust/
+ImageSet/
+data/elpv-dataset/
+data/solar-panel-images/
+data/raw/
+data/processed/*
+!data/processed/build_features.csv
+
+# YOLO training runs (keep weights path if required via artifacts)
+yolo_fault_detection/runs/
+yolo_fault_detection/runs.zip
+**/runs/
+
+# Heavy optional artifacts (models re-fetched or baked selectively)
+artifacts/*.pt
+artifacts/*.h5
+artifacts/*.keras
+# Keep production pickles if present
+# artifacts/solar_model.pkl and wind_model.pkl are intentionally not ignored here
+
+# Docs / design sources
+docs/
+**/*.drawio
+**/*.pptx
+
+# Local logs / vector DB rebuild on deploy if needed
+logs/
+*.log
+vector_db/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# CI / local tooling
+.github/
+Dockerfile.dev
+docker-compose.override.yml

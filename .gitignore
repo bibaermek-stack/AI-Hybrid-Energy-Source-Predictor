@@ -1,0 +1,81 @@
+# ============================================================
+# EcoPredict AI — .gitignore
+# ============================================================
+
+# Python кэш
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# ============================================================
+# КЕРЕК ЕМЕС ҮЛКЕН ФАЙЛДАР
+# ============================================================
+
+# API keys / secrets
+.env
+
+# ChromaDB local index (rebuild: python -m src.rag.create_vector_db)
+vector_db/*
+!vector_db/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# ============================================================
+# ҮЛКЕН ML МОДЕЛЬДЕР (тек solar_model.pkl, wind_model.pkl,
+# solar_lstm_model.h5, lstm_scaler.pkl — керек!)
+# ============================================================
+artifacts/vgg16_solar_model.h5
+artifacts/resnet50_solar_model.h5
+artifacts/solar_dust_model.h5
+artifacts/clean_dirty_model.h5
+artifacts/solar_rf_model.pkl
+artifacts/solar_forecast_rf.pkl
+artifacts/solar_forecast_xgb.pkl
+artifacts/solar_forecast_lstm.h5
+artifacts/solar_forecast_lstm_best.keras
+artifacts/solar_forecast_scaler.pkl
+artifacts/smart_grid_model.pkl
+
+# ============================================================
+# ҮЛКЕН DATASET ФАЙЛДАР (Kaggle/Google Drive-та сақтаңыз)
+# ============================================================
+modified_labels.csv
+
+# Image datasets (3.6 GB+)
+dataset/
+Detect_solar_dust/
+ImageSet/
+
+# Processed data (keep LSTM/forecast feature table in repo for production)
+data/processed/*
+!data/processed/build_features.csv
+
+# (3D viewer assets under dashboard/static/ are committed for Railway /app/static)
+
+
+# Large PyTorch CNN/ELPV weights (train locally; keep metrics JSON only)
+artifacts/*.pt
+artifacts/*_probe.pt
+artifacts/*_elpv*.pt
+artifacts/*_fault.pt
+data/elpv-dataset/
+
+# Local research scratch (do not commit)
+_research/
+
+# Build artifacts & APK
+build/
+*.apk

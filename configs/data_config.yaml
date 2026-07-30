@@ -1,0 +1,29 @@
+data_path:
+  solar_generation: data/raw/Plant_1_Generation_Data.csv
+  solar_weather: data/raw/Plant_1_Weather_Sensor_Data.csv
+  solar_features: data/processed/build_features.csv
+  solar_cleaned: data/processed/solar_cleaned.csv
+  wind_data: data/raw/wind.csv
+
+features:
+  solar:
+    - IRRADIATION
+    - AMBIENT_TEMPERATURE
+    - MODULE_TEMPERATURE
+    - hour
+    - day
+    - month
+  solar_target: AC_POWER
+
+  wind:
+    - Wind Speed (m/s)
+    - Wind Direction (°)
+    - Theoretical_Power_Curve (KWh)
+  wind_target: LV ActivePower (kW)
+
+artifacts:
+  solar_model: artifacts/solar_model.pkl
+  wind_model: artifacts/wind_model.pkl
+  lstm_model: artifacts/solar_lstm_model.h5
+  lstm_scaler: artifacts/lstm_scaler.pkl
+  metrics: artifacts/model_metrics.json

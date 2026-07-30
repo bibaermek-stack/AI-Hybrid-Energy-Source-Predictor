@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solar Inverter Subsystem — Training Lab</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, Segoe UI, sans-serif;
+      background: #0b0f19; color: #e5e7eb; overflow: hidden;
+    }
+    #c { width: 100vw; height: 100vh; display: block; }
+    .panel {
+      position: absolute; z-index: 5; top: 10px; left: 10px;
+      width: min(300px, 90vw); max-height: 88vh; overflow: auto;
+      background: rgba(17,24,39,.9); border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px; padding: 12px 14px; backdrop-filter: blur(10px);
+    }
+    h1 { font-size: .95rem; margin: 0 0 8px; color: #58a6ff; }
+    h2 { font-size: .75rem; margin: 12px 0 6px; color: #9ca3af; text-transform: uppercase; }
+    .hint { font-size: .75rem; color: #9ca3af; line-height: 1.35; margin-bottom: 8px; }
+    .part-btn {
+      display: block; width: 100%; text-align: left; margin: 3px 0;
+      padding: 6px 9px; border-radius: 8px; border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.04); color: #e5e7eb; cursor: pointer; font-size: .78rem;
+    }
+    .part-btn:hover, .part-btn.active {
+      border-color: #388bfd; background: rgba(56,139,253,.22);
+    }
+    #status {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      z-index: 5; background: rgba(17,24,39,.92); padding: 8px 14px; border-radius: 999px;
+      font-size: .78rem; border: 1px solid rgba(255,255,255,.1); max-width: 92vw; text-align: center;
+    }
+    #loading {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #0b0f19; z-index: 20; flex-direction: column; gap: 12px;
+    }
+    .spin {
+      width: 48px; height: 48px; border: 3px solid rgba(56,139,253,.2);
+      border-top-color: #388bfd; border-radius: 50%; animation: s 1s linear infinite;
+    }
+    @keyframes s { to { transform: rotate(360deg); } }
+    .swatch {
+      display:inline-block; width:12px; height:12px; border-radius:3px;
+      vertical-align:middle; margin-right:6px; background-size:cover;
+    }
+    .tex-ok { color: #4ade80; font-size: .68rem; }
+    #err {
+      display: none; position: absolute; z-index: 15; left: 50%; top: 50%;
+      transform: translate(-50%,-50%); background: rgba(127,29,29,.9);
+      padding: 14px 18px; border-radius: 10px; max-width: 80vw; font-size: .85rem;
+    }
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="loading"><div class="spin"></div><div id="loadmsg">Loading…</div></div>
+  <div id="err"></div>
+  <canvas id="c"></canvas>
+  <div class="panel">
+    <h1 id="title">Solar Inverter Subsystem</h1>
+    <p class="hint" id="story">Click a part, then fix the port on the Streamlit board.</p>
+    <h2 id="h_parts">Parts</h2>
+    <div id="parts"></div>
+    <h2 id="h_focus">Focus</h2>
+    <div id="focus" class="hint">—</div>
+    <p class="hint" id="texnote"></p>
+  </div>
+  <div id="status">Orbit · Zoom · Click</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+    const params = new URLSearchParams(location.search);
+    const lang = (params.get('lang') || 'en') === 'kk' ? 'kk' : 'en';
+    const focus = (params.get('focus') || '').split(',').filter(Boolean);
+    const scenario = params.get('scenario') || 'healthy';
+
+    const T = {
+      en: {
+        title: 'Solar Inverter Subsystem',
+        story: 'CAD textures on each mesh. Click a part → fix that port on the wiring board.',
+        parts: 'Parts (click)',
+        focus: 'Scenario focus',
+        status: 'Drag to orbit · Scroll to zoom · Click mesh',
+        loading: 'Loading meshes + textures…',
+        texNote: 'PNG basecolors applied (export had no MTL).',
+        empty: 'No mesh loaded. Check static path / models folder.',
+      },
+      kk: {
+        title: 'Solar Inverter Subsystem — оқу',
+        story: 'CAD текстуралар mesh-те. Бөлікті басып, Streamlit тақтасында портты түзетіңіз.',
+        parts: 'Бөліктер (басу)',
+        focus: 'Сценарий',
+        status: 'Айналдыру · Zoom · Mesh басу',
+        loading: 'Mesh + текстура…',
+        texNote: 'PNG basecolor қосылды (.mtl экспортта жоқ еді).',
+        empty: 'Mesh жүктелмеді. static/models жолын тексеріңіз.',
+      },
+    }[lang];
+
+    document.getElementById('title').textContent = T.title;
+    document.getElementById('story').textContent = T.story;
+    document.getElementById('h_parts').textContent = T.parts;
+    document.getElementById('h_focus').textContent = T.focus;
+    document.getElementById('status').textContent = T.status;
+    document.getElementById('loadmsg').textContent = T.loading;
+    document.getElementById('texnote').textContent = T.texNote;
+    document.getElementById('focus').textContent = focus.length ? focus.join(', ') : scenario;
+
+    const TEX = {
+      isolator: 'PV_AC_isolatorbasecolortexture_0.png.png',
+      inverter: 'PV_inverterbasecolortexture_1.png.png',
+      inverter2: 'adskMatPV_inverterbasecolortexture_2.png.png',
+      metal: 'Material__733basecolortexture_3.png.png',
+      meter: 'adskMatPV_generation_meterbasecolortexture_4.png.png',
+      inverter3: 'adskMatPV_inverter_1basecolortexture_5.png.png',
+    };
+
+    const PART_MAP = {
+      model_0:  { role: 'inverter_body',    en: 'Inverter chassis', kk: 'Инвертор корпусы', color: 0x9ca3af, tex: TEX.inverter },
+      model_1:  { role: 'generation_meter', en: 'Generation meter', kk: 'Өндіріс есептегіші', color: 0x38bdf8, tex: TEX.meter },
+      model_2:  { role: 'dc_pos',           en: 'DC+ terminal', kk: 'DC+ терминал', color: 0xef4444, tex: TEX.metal },
+      model_3:  { role: 'dc_neg',           en: 'DC− terminal', kk: 'DC− терминал', color: 0x3b82f6, tex: TEX.metal },
+      model_4:  { role: 'ac_l',             en: 'AC Line (L)', kk: 'AC фаза (L)', color: 0xf59e0b, tex: TEX.metal },
+      model_5:  { role: 'pe',               en: 'PE earth', kk: 'PE жер', color: 0x22c55e, tex: TEX.metal },
+      model_6:  { role: 'isolator',         en: 'AC isolator', kk: 'AC ажыратқыш', color: 0xa855f7, tex: TEX.isolator },
+      model_7:  { role: 'logger',           en: 'Data logger', kk: 'Data logger', color: 0xec4899, tex: TEX.inverter3 },
+      model_8:  { role: 'ac_n',             en: 'AC Neutral (N)', kk: 'AC ноль (N)', color: 0xeab308, tex: TEX.metal },
+      model_9:  { role: 'fuse',             en: 'Protection', kk: 'Қорғаныс', color: 0xf97316, tex: TEX.metal },
+      model_10: { role: 'pv_string',        en: 'PV string entry', kk: 'PV тізбек', color: 0x14b8a6, tex: TEX.metal },
+      model_11: { role: 'structure',        en: 'Structure', kk: 'Құрылым', color: 0x6b7280, tex: TEX.inverter2 },
+      model_12: { role: 'cable_tray',       en: 'Cable tray', kk: 'Кабель лотогы', color: 0x78716c, tex: TEX.metal },
+    };
+
+    // Resolve model folder relative to this HTML (works for /app/static and :8765/)
+    const modelBase = new URL('models/solar_inverter_subsystem/', document.baseURI || location.href).href;
+
+    const canvas = document.getElementById('c');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0f19);
+
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 500);
+    camera.position.set(3, 2, 4);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.target.set(0, 0, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+    const d1 = new THREE.DirectionalLight(0xffffff, 1.2);
+    d1.position.set(5, 10, 4);
+    scene.add(d1);
+    const d2 = new THREE.DirectionalLight(0xaaccff, 0.45);
+    d2.position.set(-4, 3, -3);
+    scene.add(d2);
+    scene.add(new THREE.HemisphereLight(0xddeeff, 0x222233, 0.4));
+
+    // Floor grid so empty camera is obvious
+    const grid = new THREE.GridHelper(8, 16, 0x334155, 0x1e293b);
+    grid.position.y = -0.01;
+    scene.add(grid);
+
+    const root = new THREE.Group();
+    scene.add(root);
+
+    const meshByRole = {};
+    const objLoader = new OBJLoader();
+    const texLoader = new THREE.TextureLoader();
+    texLoader.setPath(modelBase);
+
+    const textureCache = new Map();
+    let texOk = 0;
+    let texFail = 0;
+    let meshCount = 0;
+    let objOk = 0;
+    let objFail = 0;
+
+    function loadTexture(file) {
+      if (!file) return Promise.resolve(null);
+      if (textureCache.has(file)) return textureCache.get(file);
+      const p = new Promise((resolve) => {
+        texLoader.load(
+          file,
+          (tex) => {
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.flipY = true;
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            texOk += 1;
+            resolve(tex);
+          },
+          undefined,
+          () => { texFail += 1; resolve(null); }
+        );
+      });
+      textureCache.set(file, p);
+      return p;
+    }
+
+    function ensureUVs(geometry) {
+      if (!geometry || geometry.getAttribute('uv')) return;
+      geometry.computeBoundingBox();
+      const bb = geometry.boundingBox;
+      if (!bb) return;
+      const pos = geometry.getAttribute('position');
+      if (!pos) return;
+      const size = new THREE.Vector3();
+      bb.getSize(size);
+      const uvs = new Float32Array(pos.count * 2);
+      const sx = size.x || 1, sy = size.y || 1, sz = size.z || 1;
+      // project XZ
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), z = pos.getZ(i);
+        uvs[i * 2] = (x - bb.min.x) / sx;
+        uvs[i * 2 + 1] = (z - bb.min.z) / sz;
+      }
+      geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    }
+
+    function makeMaterial(meta, map) {
+      return new THREE.MeshStandardMaterial({
+        map: map || null,
+        color: map ? 0xffffff : meta.color,
+        metalness: 0.3,
+        roughness: 0.55,
+        side: THREE.DoubleSide,
+        emissive: 0x000000,
+      });
+    }
+
+    function fitCamera(object) {
+      const box = new THREE.Box3().setFromObject(object);
+      if (box.isEmpty()) return false;
+      const size = new THREE.Vector3();
+      const center = new THREE.Vector3();
+      box.getSize(size);
+      box.getCenter(center);
+      const maxSize = Math.max(size.x, size.y, size.z, 0.001);
+      // Re-center group so pivot is origin
+      object.position.sub(center);
+      // Scale to ~2.5 units
+      const s = 2.5 / maxSize;
+      object.scale.multiplyScalar(s);
+
+      const box2 = new THREE.Box3().setFromObject(object);
+      box2.getCenter(center);
+      object.position.sub(center);
+
+      const dist = 3.2;
+      camera.position.set(dist, dist * 0.65, dist);
+      camera.near = 0.01;
+      camera.far = 200;
+      camera.updateProjectionMatrix();
+      controls.target.set(0, 0, 0);
+      controls.update();
+      grid.position.y = -1.3;
+      return true;
+    }
+
+    function highlight(role) {
+      Object.entries(meshByRole).forEach(([r, mesh]) => {
+        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+        mats.forEach((m) => {
+          if (!m) return;
+          m.emissive = new THREE.Color(r === role ? 0x2563eb : 0x000000);
+          m.emissiveIntensity = r === role ? 0.65 : 1;
+        });
+      });
+      document.querySelectorAll('.part-btn').forEach((b) => {
+        b.classList.toggle('active', b.dataset.role === role);
+      });
+      const meta = Object.values(PART_MAP).find((p) => p.role === role);
+      const label = meta ? meta[lang] : role;
+      document.getElementById('status').textContent =
+        (lang === 'kk' ? 'Таңдалды: ' : 'Selected: ') + label;
+    }
+
+    function addPartButton(name, meta) {
+      const btn = document.createElement('button');
+      btn.className = 'part-btn';
+      btn.dataset.role = meta.role;
+      const sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.backgroundColor = '#' + meta.color.toString(16).padStart(6, '0');
+      if (meta.tex) sw.style.backgroundImage = `url('${modelBase}${meta.tex}')`;
+      btn.appendChild(sw);
+      btn.appendChild(document.createTextNode(meta[lang] + ' '));
+      const badge = document.createElement('span');
+      badge.className = 'tex-ok';
+      badge.textContent = meta.tex ? '· tex' : '';
+      btn.appendChild(badge);
+      if (focus.includes(meta.role)) btn.style.outline = '1px solid #fbbf24';
+      btn.onclick = () => highlight(meta.role);
+      document.getElementById('parts').appendChild(btn);
+    }
+
+    const files = Object.keys(PART_MAP);
+    const uniqueTex = [...new Set(Object.values(PART_MAP).map((m) => m.tex).filter(Boolean))];
+    await Promise.all(uniqueTex.map((f) => loadTexture(f)));
+
+    await Promise.all(
+      files.map(
+        (name) =>
+          new Promise((resolve) => {
+            const meta = PART_MAP[name];
+            objLoader.load(
+              modelBase + name + '.obj',
+              async (obj) => {
+                const map = meta.tex ? await loadTexture(meta.tex) : null;
+                let localMeshes = 0;
+                obj.traverse((ch) => {
+                  if (!ch.isMesh) return;
+                  ensureUVs(ch.geometry);
+                  if (ch.geometry && !ch.geometry.getAttribute('normal')) {
+                    ch.geometry.computeVertexNormals();
+                  }
+                  ch.material = makeMaterial(meta, map);
+                  ch.userData.role = meta.role;
+                  ch.frustumCulled = false;
+                  meshByRole[meta.role] = ch;
+                  meshCount += 1;
+                  localMeshes += 1;
+                });
+                if (localMeshes > 0) {
+                  root.add(obj);
+                  objOk += 1;
+                } else {
+                  objFail += 1;
+                }
+                document.getElementById('loadmsg').textContent =
+                  `${T.loading} ${objOk}/${files.length} · mesh ${meshCount}`;
+                resolve();
+              },
+              undefined,
+              (err) => {
+                objFail += 1;
+                console.warn('OBJ fail', name, err);
+                resolve();
+              }
+            );
+          })
+      )
+    );
+
+    Object.entries(PART_MAP).forEach(([n, m]) => addPartButton(n, m));
+
+    const ok = fitCamera(root);
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('texnote').textContent =
+      `${T.texNote} (${texOk} maps, ${objOk} objs, ${meshCount} meshes` +
+      (objFail ? `, ${objFail} failed` : '') + ')';
+    document.getElementById('status').textContent =
+      `base: ${modelBase} · meshes: ${meshCount}`;
+
+    if (!ok || meshCount === 0) {
+      const el = document.getElementById('err');
+      el.style.display = 'block';
+      el.textContent = T.empty + ' ' + modelBase;
+    } else if (focus[0]) {
+      highlight(focus[0]);
+    }
+
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    canvas.addEventListener('pointerdown', (ev) => {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObjects(root.children, true);
+      if (hits.length) {
+        let o = hits[0].object;
+        while (o && !o.userData.role && o.parent) o = o.parent;
+        if (o && o.userData.role) highlight(o.userData.role);
+      }
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+
+    (function tick() {
+      requestAnimationFrame(tick);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+  </script>
+</body>
+</html>

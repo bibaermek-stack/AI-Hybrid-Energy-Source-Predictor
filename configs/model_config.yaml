@@ -1,0 +1,32 @@
+solar_model:
+  type: RandomForest
+  n_estimators: 200
+  max_depth: 10
+  random_state: 42
+
+wind_model:
+  type: XGBoost
+  learning_rate: 0.05
+  n_estimators: 200
+  max_depth: 6
+  tree_method: hist
+  random_state: 42
+
+lstm_model:
+  type: LSTM
+  layers: [64, 32]
+  dropout: 0.2
+  sequence_length: 24
+  n_features: 6
+  loss: mae
+  optimizer: adam
+
+hybrid_optimizer:
+  default_strategy: hybrid
+  strategies: [hybrid, min_cost, max_power, balanced]
+  primary_share_threshold: 0.65
+
+yolo_fault:
+  model: yolo11n
+  weights: yolo_fault_detection/runs/runs/detect/train/weights/best.pt
+  classes: [Clean, Dust, Bird, Electrical, Physical, Snow]

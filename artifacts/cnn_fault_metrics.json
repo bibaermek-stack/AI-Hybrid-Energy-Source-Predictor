@@ -1,0 +1,148 @@
+{
+  "task": "cnn_fault_retrain_improved",
+  "framework": "pytorch + sklearn logistic probe",
+  "results": [
+    {
+      "model": "resnet50",
+      "task": "multiclass",
+      "classes": [
+        "Bird-drop",
+        "Clean",
+        "Dusty",
+        "Electrical-damage",
+        "Physical-Damage",
+        "Snow-Covered"
+      ],
+      "n_train": 880,
+      "n_val": 220,
+      "best_val_acc": 0.6,
+      "precision_macro": 0.3444834021888816,
+      "recall_macro": 0.3722222222222223,
+      "f1_macro": 0.35061278530603684,
+      "per_class_acc": {
+        "Bird-drop": 0.2,
+        "Clean": 0.6444444444444445,
+        "Dusty": 0.5888888888888889,
+        "Electrical-damage": 0.3,
+        "Physical-Damage": 0.3,
+        "Snow-Covered": 0.2
+      },
+      "weights_path": "artifacts\\resnet50_multiclass_probe.pt",
+      "method": "frozen_backbone_logreg",
+      "seconds": 80.86484146118164
+    },
+    {
+      "model": "vgg16",
+      "task": "multiclass",
+      "classes": [
+        "Bird-drop",
+        "Clean",
+        "Dusty",
+        "Electrical-damage",
+        "Physical-Damage",
+        "Snow-Covered"
+      ],
+      "n_train": 880,
+      "n_val": 220,
+      "best_val_acc": 0.6181818181818182,
+      "precision_macro": 0.3871814831761957,
+      "recall_macro": 0.425925925925926,
+      "f1_macro": 0.3972019389786543,
+      "per_class_acc": {
+        "Bird-drop": 0.3,
+        "Clean": 0.7,
+        "Dusty": 0.6555555555555556,
+        "Electrical-damage": 0.6,
+        "Physical-Damage": 0.1,
+        "Snow-Covered": 0.2
+      },
+      "weights_path": "artifacts\\vgg16_multiclass_probe.pt",
+      "method": "frozen_backbone_logreg",
+      "seconds": 122.37619876861572
+    },
+    {
+      "model": "resnet50",
+      "task": "binary",
+      "classes": [
+        "Clean",
+        "Dirty"
+      ],
+      "n_train": 1280,
+      "n_val": 320,
+      "best_val_acc": 0.809375,
+      "precision_macro": 0.8094838028994569,
+      "recall_macro": 0.809375,
+      "f1_macro": 0.8093582443769471,
+      "per_class_acc": {
+        "Clean": 0.8,
+        "Dirty": 0.81875
+      },
+      "weights_path": "artifacts\\resnet50_binary_probe.pt",
+      "method": "frozen_backbone_logreg",
+      "seconds": 130.64753890037537
+    },
+    {
+      "model": "vgg16",
+      "task": "binary",
+      "classes": [
+        "Clean",
+        "Dirty"
+      ],
+      "n_train": 1280,
+      "n_val": 320,
+      "best_val_acc": 0.784375,
+      "precision_macro": 0.7673901930714482,
+      "recall_macro": 0.765625,
+      "f1_macro": 0.7652375502538369,
+      "per_class_acc": {
+        "Clean": 0.80625,
+        "Dirty": 0.725
+      },
+      "weights_path": "artifacts\\vgg16_binary_probe.pt",
+      "method": "frozen_backbone_logreg",
+      "seconds": 207.34885716438293
+    }
+  ],
+  "best_summary_pct": {
+    "resnet50_multiclass": {
+      "val_accuracy_pct": 60.0,
+      "precision_macro_pct": 34.45,
+      "recall_macro_pct": 37.22,
+      "f1_macro_pct": 35.06,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\resnet50_multiclass_probe.pt",
+      "n_train": 880,
+      "n_val": 220
+    },
+    "vgg16_multiclass": {
+      "val_accuracy_pct": 61.82,
+      "precision_macro_pct": 38.72,
+      "recall_macro_pct": 42.59,
+      "f1_macro_pct": 39.72,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\vgg16_multiclass_probe.pt",
+      "n_train": 880,
+      "n_val": 220
+    },
+    "resnet50_binary": {
+      "val_accuracy_pct": 80.94,
+      "precision_macro_pct": 80.95,
+      "recall_macro_pct": 80.94,
+      "f1_macro_pct": 80.94,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\resnet50_binary_probe.pt",
+      "n_train": 1280,
+      "n_val": 320
+    },
+    "vgg16_binary": {
+      "val_accuracy_pct": 78.44,
+      "precision_macro_pct": 76.74,
+      "recall_macro_pct": 76.56,
+      "f1_macro_pct": 76.52,
+      "method": "frozen_backbone_logreg",
+      "weights": "artifacts\\vgg16_binary_probe.pt",
+      "n_train": 1280,
+      "n_val": 320
+    }
+  }
+}

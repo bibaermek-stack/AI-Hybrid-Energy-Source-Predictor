@@ -1,0 +1,218 @@
+{
+  "dataset": "https://github.com/zae-bayern/elpv-dataset",
+  "n_images": 2624,
+  "results": [
+    {
+      "model": "resnet50",
+      "task": "binary",
+      "classes": [
+        "functional",
+        "defective"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 78.29,
+      "sklearn_accuracy_pct": 76.0,
+      "precision_macro_pct": 75.47,
+      "recall_macro_pct": 75.21,
+      "f1_macro_pct": 75.32,
+      "weights": "artifacts\\resnet50_elpv_binary.pt",
+      "seconds": 126.4,
+      "method": "imagenet_frozen_backbone + logistic_regression"
+    },
+    {
+      "model": "vgg16",
+      "task": "binary",
+      "classes": [
+        "functional",
+        "defective"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 79.81,
+      "sklearn_accuracy_pct": 76.95,
+      "precision_macro_pct": 76.43,
+      "recall_macro_pct": 76.33,
+      "f1_macro_pct": 76.38,
+      "weights": "artifacts\\vgg16_elpv_binary.pt",
+      "seconds": 203.7,
+      "method": "imagenet_frozen_backbone + logistic_regression"
+    },
+    {
+      "model": "resnet50",
+      "task": "severity",
+      "classes": [
+        "0.0",
+        "0.33",
+        "0.66",
+        "1.0"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 73.71,
+      "sklearn_accuracy_pct": 69.14,
+      "precision_macro_pct": 49.43,
+      "recall_macro_pct": 50.43,
+      "f1_macro_pct": 49.79,
+      "weights": "artifacts\\resnet50_elpv_severity.pt",
+      "seconds": 116.1,
+      "method": "imagenet_frozen_backbone + logistic_regression"
+    },
+    {
+      "model": "vgg16",
+      "task": "severity",
+      "classes": [
+        "0.0",
+        "0.33",
+        "0.66",
+        "1.0"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 75.05,
+      "sklearn_accuracy_pct": 67.05,
+      "precision_macro_pct": 51.56,
+      "recall_macro_pct": 55.39,
+      "f1_macro_pct": 52.84,
+      "weights": "artifacts\\vgg16_elpv_severity.pt",
+      "seconds": 221.5,
+      "method": "imagenet_frozen_backbone + logistic_regression"
+    },
+    {
+      "model": "resnet50",
+      "task": "binary_half",
+      "classes": [
+        "functional",
+        "defective"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 86.86,
+      "sklearn_accuracy_pct": 83.81,
+      "precision_macro_pct": 80.97,
+      "recall_macro_pct": 82.74,
+      "f1_macro_pct": 81.71,
+      "weights": "artifacts\\resnet50_elpv_binary_half.pt",
+      "seconds": 110.3,
+      "method": "imagenet_frozen_backbone + logistic_regression"
+    },
+    {
+      "model": "vgg16",
+      "task": "binary_half",
+      "classes": [
+        "functional",
+        "defective"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 85.33,
+      "sklearn_accuracy_pct": 82.29,
+      "precision_macro_pct": 79.29,
+      "recall_macro_pct": 80.96,
+      "f1_macro_pct": 79.98,
+      "weights": "artifacts\\vgg16_elpv_binary_half.pt",
+      "seconds": 212.6,
+      "method": "imagenet_frozen_backbone + logistic_regression"
+    },
+    {
+      "model": "resnet50",
+      "task": "binary_finetune",
+      "classes": [
+        "functional",
+        "defective"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 74.86,
+      "precision_macro_pct": 75.22,
+      "recall_macro_pct": 72.81,
+      "f1_macro_pct": 73.24,
+      "weights": "artifacts\\resnet50_elpv_binary_ft.pt",
+      "seconds": 1085.4,
+      "method": "partial_finetune"
+    },
+    {
+      "model": "vgg16",
+      "task": "binary_finetune",
+      "classes": [
+        "functional",
+        "defective"
+      ],
+      "n_train": 2099,
+      "n_val": 525,
+      "val_accuracy_pct": 80.19,
+      "precision_macro_pct": 79.74,
+      "recall_macro_pct": 79.67,
+      "f1_macro_pct": 79.71,
+      "weights": "artifacts\\vgg16_elpv_binary_ft.pt",
+      "seconds": 2458.1,
+      "method": "partial_finetune"
+    }
+  ],
+  "best_summary_pct": {
+    "resnet50_binary": {
+      "val_accuracy_pct": 78.29,
+      "f1_macro_pct": 75.32,
+      "precision_macro_pct": 75.47,
+      "recall_macro_pct": 75.21,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\resnet50_elpv_binary.pt"
+    },
+    "vgg16_binary": {
+      "val_accuracy_pct": 79.81,
+      "f1_macro_pct": 76.38,
+      "precision_macro_pct": 76.43,
+      "recall_macro_pct": 76.33,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\vgg16_elpv_binary.pt"
+    },
+    "resnet50_severity": {
+      "val_accuracy_pct": 73.71,
+      "f1_macro_pct": 49.79,
+      "precision_macro_pct": 49.43,
+      "recall_macro_pct": 50.43,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\resnet50_elpv_severity.pt"
+    },
+    "vgg16_severity": {
+      "val_accuracy_pct": 75.05,
+      "f1_macro_pct": 52.84,
+      "precision_macro_pct": 51.56,
+      "recall_macro_pct": 55.39,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\vgg16_elpv_severity.pt"
+    },
+    "resnet50_binary_half": {
+      "val_accuracy_pct": 86.86,
+      "f1_macro_pct": 81.71,
+      "precision_macro_pct": 80.97,
+      "recall_macro_pct": 82.74,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\resnet50_elpv_binary_half.pt"
+    },
+    "vgg16_binary_half": {
+      "val_accuracy_pct": 85.33,
+      "f1_macro_pct": 79.98,
+      "precision_macro_pct": 79.29,
+      "recall_macro_pct": 80.96,
+      "method": "imagenet_frozen_backbone + logistic_regression",
+      "weights": "artifacts\\vgg16_elpv_binary_half.pt"
+    },
+    "resnet50_binary_finetune": {
+      "val_accuracy_pct": 74.86,
+      "f1_macro_pct": 73.24,
+      "precision_macro_pct": 75.22,
+      "recall_macro_pct": 72.81,
+      "method": "partial_finetune",
+      "weights": "artifacts\\resnet50_elpv_binary_ft.pt"
+    },
+    "vgg16_binary_finetune": {
+      "val_accuracy_pct": 80.19,
+      "f1_macro_pct": 79.71,
+      "precision_macro_pct": 79.74,
+      "recall_macro_pct": 79.67,
+      "method": "partial_finetune",
+      "weights": "artifacts\\vgg16_elpv_binary_ft.pt"
+    }
+  }
+}
