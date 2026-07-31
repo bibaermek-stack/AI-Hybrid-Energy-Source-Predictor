@@ -282,7 +282,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
 
     page.run_task(load_live_data)
 
-    return ft.ListView(
+    view = ft.ListView(
         controls=[
             hero_card,
             ft.Container(height=10),
@@ -298,3 +298,8 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         spacing=10,
         padding=12,
     )
+    # main.py caches views in a dict and never rebuilds them, so without this
+    # the "Real-time" panel would keep showing whatever it read at app launch.
+    # on_nav_change re-runs whatever callable a view leaves here.
+    view.data = load_live_data
+    return view

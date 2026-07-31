@@ -137,10 +137,17 @@ async def main(page: ft.Page):
     def on_nav_change(view_key: str):
         if view_key in views:
             state.active_tab = view_key
-            view_container.content = views[view_key]
+            target = views[view_key]
+            view_container.content = target
             if view_key in view_keys and page.navigation_bar:
                 page.navigation_bar.selected_index = view_keys.index(view_key)
             page.update()
+            # Views are built once and cached, so a screen showing live figures
+            # would otherwise keep whatever it loaded at startup. A view opts in
+            # by leaving an async reload callable in .data.
+            reload_fn = getattr(target, "data", None)
+            if callable(reload_fn):
+                page.run_task(reload_fn)
 
     # Views Registry
     views = {
