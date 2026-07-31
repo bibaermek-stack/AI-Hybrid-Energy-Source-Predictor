@@ -187,70 +187,113 @@ if __name__ == "__main__":
     ft.run(main)
 
 # ============================================================
-# FastAPI Backend Server (for Railway Root Directory = mobile)
+# Optional FastAPI backend, for deployments that point at this directory.
+#
+# NOTE: with Railway "Root Directory = mobile", the api/ and src/ packages of
+# the repo are outside the deployment, so `from api.routes import router` can
+# only ever raise ModuleNotFoundError — leaving a service that answers /health
+# but 404s /predict, /chat and every /solarman/* route. Serving the real API
+# requires deploying from the repository root instead.
+#
+# These imports are guarded because this module is also the Flet mobile entry
+# point: the APK bundles flet only, so an unguarded `import fastapi` here would
+# crash the app on launch.
 # ============================================================
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 import logging
 import os
 
 logger = logging.getLogger("mobile-backend")
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
-db_status = "disconnected"
+try:
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
 
-if DATABASE_URL:
+    _FASTAPI_AVAILABLE = True
+except ImportError:  # running inside the APK — no server, nothing to do
+    _FASTAPI_AVAILABLE = False
+
+app = None
+
+if _FASTAPI_AVAILABLE:
+    DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+    db_status = "disconnected"
+
+    if DATABASE_URL:
+        try:
+            import sqlalchemy  # type: ignore # pyright: ignore[reportMissingImports]
+
+            engine = sqlalchemy.create_engine(DATABASE_URL, pool_pre_ping=True)
+            with engine.connect() as conn:
+                conn.execute(sqlalchemy.text("SELECT 1"))
+            db_status = "connected"
+            logger.info("PostgreSQL Database connected successfully in mobile backend!")
+        except Exception as exc:
+            logger.warning("Database connection failed in mobile backend: %s", str(exc))
+            db_status = "error_fallback"
+
+    app = FastAPI(
+        title="EcoPredict AI Mobile Service",
+        description="FastAPI Backend for EcoPredict AI Mobile App & Railway deployment",
+        version="2.0.0",
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Mount the feature routes first so their /health wins when available.
+    api_router_loaded = False
+    api_router_error = None
     try:
-        import sqlalchemy  # type: ignore # pyright: ignore[reportMissingImports]
-        engine = sqlalchemy.create_engine(DATABASE_URL, pool_pre_ping=True)
-        with engine.connect() as conn:
-            conn.execute(sqlalchemy.text("SELECT 1"))
-        db_status = "connected"
-        logger.info("PostgreSQL Database connected successfully in mobile backend!")
-    except Exception as exc:
-        logger.warning("Database connection failed in mobile backend: %s", str(exc))
-        db_status = "error_fallback"
+        from api.routes import router as api_router
 
-app = FastAPI(
-    title="EcoPredict AI Mobile Service",
-    description="FastAPI Backend for EcoPredict AI Mobile App & Railway deployment",
-    version="2.0.0",
-)
+        app.include_router(api_router)
+        api_router_loaded = True
+        logger.info("API router included — feature routes available.")
+    except Exception as err:
+        api_router_error = f"{type(err).__name__}: {err}"
+        logger.error(
+            "API router NOT included — /predict, /chat and /solarman/* will return "
+            "404. This deployment cannot see the repo's api/ package; deploy from "
+            "the repository root instead of mobile/. Cause: %s",
+            err,
+            exc_info=True,
+        )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    @app.get("/")
+    async def root_status():
+        return {
+            "status": "online",
+            "service": "EcoPredict AI Mobile Backend",
+            "database_url_configured": bool(DATABASE_URL),
+            "database_status": db_status,
+            "api_router_loaded": api_router_loaded,
+            "version": "2.0.0",
+        }
 
-@app.get("/")
-async def root_status():
-    return {
-        "status": "online",
-        "service": "EcoPredict AI Mobile Backend",
-        "database_url_configured": bool(DATABASE_URL),
-        "database_status": db_status,
-        "version": "2.0.0",
-    }
+    @app.get("/health")
+    async def health_check():
+        """
+        Degraded-mode reply; the router's own /health takes precedence when it
+        loads. `api` tells clients whether the feature routes are really mounted
+        — reporting "full" without them is what made a broken deployment look
+        healthy to the mobile app.
+        """
+        return {
+            "status": "healthy" if api_router_loaded else "degraded",
+            "api": "full" if api_router_loaded else "stub",
+            "database": db_status,
+            "models_loaded": {"solar": api_router_loaded, "wind": api_router_loaded},
+            "api_router_error": api_router_error,
+        }
 
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "database": db_status,
-        "models_loaded": {"solar": True, "wind": True},
-    }
+    try:
+        import flet_fastapi  # type: ignore # pyright: ignore[reportMissingImports]
 
-try:
-    from api.routes import router as api_router
-    app.include_router(api_router)
-except Exception:
-    pass
-
-try:
-    import flet_fastapi  # type: ignore # pyright: ignore[reportMissingImports]
-    app.mount("/app", flet_fastapi.app(main))
-except Exception:
-    pass
+        app.mount("/app", flet_fastapi.app(main))
+    except Exception as err:
+        logger.info("flet_fastapi web view not mounted: %s", err)
