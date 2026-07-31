@@ -1,0 +1,28 @@
+# Dependency manifest for the Flet APK/IPA build.
+#
+# `flet build` prefers [project.dependencies] over requirements.txt, so this
+# file decides what gets bundled into the mobile binary — and it must list only
+# packages with Android/iOS wheels.
+#
+# requirements.txt in this directory is left alone on purpose: it serves the
+# Railway deployment that points at this folder. Bundling those server packages
+# broke the APK build, because psycopg2-binary (and other native server deps)
+# publish no mobile wheel:
+#   ERROR: Could not find a version that satisfies the requirement psycopg2-binary
+#
+# The app itself needs nothing beyond flet — api_client.py speaks HTTP through
+# urllib.request from the standard library.
+
+[project]
+name = "ecopredict-ai-mobile"
+version = "1.0.0"
+description = "EcoPredict AI — cross-platform mobile client"
+requires-python = ">=3.9"
+dependencies = [
+    "flet",
+]
+
+[tool.flet]
+org = "kz.ecopredict"
+product = "EcoPredict AI"
+company = "EcoPredict"
