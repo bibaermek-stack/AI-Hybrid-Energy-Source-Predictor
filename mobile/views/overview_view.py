@@ -104,10 +104,12 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         subtitle_ref=ref_load_sub,
     )
 
+    # Shows dispatched battery power, not state of charge — the API exposes no
+    # SoC, and deriving a percentage from dispatch would be a made-up number.
     card_battery = build_metric_card(
         title=state.text("ov_kpi_battery"),
         value="—",
-        unit="%",
+        unit="kW",
         icon=ft.Icons.BATTERY_CHARGING_FULL,
         accent_color="#10B981",
         subtitle="Жүктелуде…",
@@ -256,10 +258,8 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
             _set(ref_solar_sub, f"Ұсыныс: {pred.get('recommended_source', '—')}")
             _set(ref_wind_sub, f"Жел үлесі: {float(pred.get('wind_share', 0.0)) * 100:.0f}%")
             _set(ref_load_sub, f"Сенімділік: {float(pred.get('reliability_index', 0.0)) * 100:.0f}%")
-            battery = float(pred.get("battery_used", 0.0))
-            cap = max(state.battery_kw, 1.0)
-            _set(ref_batt, f"{min(100.0, abs(battery) / cap * 100):.1f}")
-            _set(ref_batt_sub, f"{state.battery_kw:.0f} kWh сыйымдылық")
+            _set(ref_batt, f"{float(pred.get('battery_used', 0.0)):.1f}")
+            _set(ref_batt_sub, f"Диспетчер · {state.battery_kw:.0f} kWh сыйымдылық")
         else:
             for r in (ref_solar, ref_wind, ref_load, ref_batt):
                 _set(r, "—")
