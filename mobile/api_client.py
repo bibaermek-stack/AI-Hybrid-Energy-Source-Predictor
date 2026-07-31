@@ -87,7 +87,13 @@ def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) ->
 class APIClient:
     """Handles REST API communication with FastAPI backend without third-party dependencies."""
 
-    def __init__(self, timeout: float = 5.0):
+    # The Railway container idles down and its first replies are slow: measured
+    # /health round trips ranged 0.5s to 7.6s from a wired connection. Mobile
+    # latency sits on top of that, so short timeouts read as "no internet".
+    HEALTH_TIMEOUT = 20.0
+    FALLBACK_HEALTH_TIMEOUT = 8.0
+
+    def __init__(self, timeout: float = 25.0):
         self.timeout = timeout
 
     @staticmethod
@@ -118,10 +124,13 @@ class APIClient:
         unique_candidates = [c for c in list(dict.fromkeys(candidates)) if c]
 
         stub_hosts: List[str] = []
-        for base_url in unique_candidates:
+        for index, base_url in enumerate(unique_candidates):
             url = f"{base_url}/health"
-            # 1.5s was too tight for a cold mobile connection.
-            res = await asyncio.to_thread(_http_get_sync, url, 6.0)
+            # Give the configured backend room to wake up; the fallbacks only
+            # exist to recover from a wrong URL, so they stay impatient rather
+            # than making a genuine outage take a minute to report.
+            timeout = self.HEALTH_TIMEOUT if index == 0 else self.FALLBACK_HEALTH_TIMEOUT
+            res = await asyncio.to_thread(_http_get_sync, url, timeout)
             if not (res and isinstance(res, dict)):
                 continue
             if not self._serves_feature_routes(res):
