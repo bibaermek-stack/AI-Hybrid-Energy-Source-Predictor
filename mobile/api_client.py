@@ -186,7 +186,10 @@ class APIClient:
     async def chat(self, prompt: str) -> str:
         """Request POST /chat from RAG AI Assistant."""
         url = f"{state.api_base_url}/chat"
-        payload = {"message": prompt, "user_id": "flet_mobile"}
+        # ChatRequest is {query, lang}; sending {message, user_id} made every
+        # request fail validation with 422, so the advisor screen only ever
+        # showed the offline fallback below.
+        payload = {"query": prompt, "lang": state.lang}
         res = await asyncio.to_thread(_http_post_sync, url, payload, 15.0)
         if res and isinstance(res, dict):
             return res.get("response") or res.get("reply") or "No response from assistant."
@@ -198,8 +201,10 @@ class APIClient:
 
     async def get_solarman_live(self) -> Dict[str, Any]:
         """Fetch Solarman live plant telemetry."""
-        url = f"{state.api_base_url}/solarman/live"
-        res = await asyncio.to_thread(_http_post_sync, url, {}, self.timeout)
+        # /solarman/live is a GET; POSTing to it returned 405 every time, which
+        # is why the live telemetry screen never populated.
+        url = f"{state.api_base_url}/solarman/live?demo=true"
+        res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
         if res and isinstance(res, dict):
             return res
         return {
