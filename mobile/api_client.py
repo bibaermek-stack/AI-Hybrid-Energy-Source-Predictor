@@ -290,6 +290,85 @@ class APIClient:
             "Бірақ жергілікті режимде барлық есептеулер жұмыс істейді!"
         )
 
+    async def get_weather(self) -> Optional[Dict[str, Any]]:
+        """Current Turkistan conditions (GET /solarman/weather)."""
+        return await asyncio.to_thread(
+            _http_get_sync, f"{state.api_base_url}/solarman/weather", self.timeout
+        )
+
+    async def solarman_process(
+        self,
+        active_power_kw: float,
+        e_today_kwh: float,
+        e_total_kwh: float,
+        module_temp_c: float,
+        fault_code: int,
+        status: int,
+        device_sn: str,
+        dc_capacity_kwp: float,
+        irradiance_w_m2: float,
+        ambient_temp_c: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Performance Ratio via POST /solarman/process.
+
+        The dashboard builds this payload from numbers typed by hand; here the
+        readings come straight off the inverter.
+        """
+        payload = {
+            "payload": {
+                "status": status,
+                "deviceSn": device_sn,
+                "dataList": [
+                    {"key": "APo", "value": str(active_power_kw), "unit": "kW"},
+                    {"key": "eToday", "value": str(e_today_kwh), "unit": "kWh"},
+                    {"key": "eTotal", "value": str(e_total_kwh), "unit": "kWh"},
+                    {"key": "T_val", "value": str(module_temp_c), "unit": "°C"},
+                    {"key": "faultCode", "value": str(fault_code), "unit": None},
+                ],
+            },
+            "dc_capacity_kwp": dc_capacity_kwp,
+            # The endpoint rejects irradiance <= 0, so keep a floor for night-time.
+            "irradiance_w_m2": max(1.0, irradiance_w_m2),
+            "ambient_temp_c": ambient_temp_c,
+        }
+        return await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/solarman/process", payload, self.timeout
+        )
+
+    async def solarman_roi(
+        self,
+        total_generation_kwh: float,
+        initial_investment_kzt: float,
+        tariff_kzt_per_kwh: float,
+        opex_annual_kzt: float = 50000.0,
+        annual_degradation: float = 0.005,
+        inflation_rate: float = 0.05,
+        lifetime_years: int = 25,
+    ) -> Optional[Dict[str, Any]]:
+        """Lifetime economics in KZT via POST /solarman/roi."""
+        payload = {
+            "total_generation_kwh": total_generation_kwh,
+            "initial_investment_kzt": initial_investment_kzt,
+            "tariff_kzt_per_kwh": tariff_kzt_per_kwh,
+            "opex_annual_kzt": opex_annual_kzt,
+            "annual_degradation": annual_degradation,
+            "inflation_rate": inflation_rate,
+            "lifetime_years": lifetime_years,
+        }
+        return await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/solarman/roi", payload, self.timeout
+        )
+
+    async def solarman_alert(self, parsed_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Offline / fault check via POST /solarman/alert."""
+        return await asyncio.to_thread(
+            _http_post_sync,
+            f"{state.api_base_url}/solarman/alert",
+            {"parsed_data": parsed_data},
+            self.timeout,
+        )
+
     async def detect_fault(
         self, content: bytes, filename: str = "panel.jpg", content_type: str = "image/jpeg"
     ) -> Optional[Dict[str, Any]]:

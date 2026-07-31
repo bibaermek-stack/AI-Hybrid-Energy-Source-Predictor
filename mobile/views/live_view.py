@@ -1,271 +1,379 @@
 """
-Solarman Live Inverter & Economic ROI View for EcoPredict AI Mobile.
-Matches the 100% full rich Solarman telemetry platform from the Web Application.
+Solarman Live Telemetry for EcoPredict AI Mobile.
+
+Mirrors the data-backed parts of the Streamlit Solarman page: live inverter
+readings, device and firmware details, per-string DC and per-phase AC values,
+Performance Ratio, KZT economics and the offline/fault check — each from its
+own endpoint.
+
+The dashboard's five analytics tabs (heatmap, MPPT curves, radar, savings area,
+histogram) are deliberately not ported: _get_cached_solar_heatmap() and
+_get_cached_mppt_telemetry() build their series with np.sin and hardcoded
+arrays, so they would be decoration presented as measurement.
 """
 
-import asyncio
 import flet as ft
 try:
     from mobile.state import state
     from mobile.api_client import api_client
+    from mobile import api_client as api_client_module
     from mobile.components.metric_card import build_metric_card
 except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
+    import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
     from components.metric_card import build_metric_card  # type: ignore # pyright: ignore[reportMissingImports]
+
+INVERTERS = ["2501221272", "2411046235"]
 
 
 def build_live_view(page: ft.Page) -> ft.Control:
-    """Build complete rich Solarman live telemetry, inverter selection, and economic ROI screen."""
     c = state.colors
+    selected_sn = INVERTERS[0]
+    latest: dict = {}
 
-    # Inverter selection
-    selected_sn = "2501221272"
-
-    # Telemetry text controls. All start blank: these used to carry plausible
-    # constants (845.2 kW, 480.2 V DC, 98.4% …) that on_refresh never touched,
-    # so most of this screen showed invented readings forever.
-    # Power and daily yield live in the KPI cards below, reached through refs;
-    # the standalone txt_power / txt_daily controls that used to be here were
-    # never added to the tree, so writing to them updated nothing on screen.
-    txt_pv_v = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_pv_i = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["accent"])
-    txt_grid_v = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"])
-    txt_grid_freq = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"])
-    txt_mppt_eff = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["success"])
-    txt_inv_temp = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color="#EC4899")
-
-    ref_kpi_power, ref_kpi_daily = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
-
-    txt_status = ft.Text("Жүктелуде…", size=14, weight=ft.FontWeight.BOLD, color=c["text_secondary"])
-    txt_weather = ft.Text("", size=12, color=c["text_secondary"])
-    progress_ring = ft.ProgressRing(visible=False, width=16, height=16, stroke_width=2, color=c["primary"])
-
-    # ROI Economic Calculator Controls
-    sl_tariff = ft.Slider(min=0.04, max=0.25, value=0.12, divisions=21, label="${value}/kWh")
-    txt_tariff_val = ft.Text("$0.12 / kWh", size=12, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_daily_revenue = ft.Text("$410.40 / күн", size=16, weight=ft.FontWeight.BOLD, color=c["success"])
-    txt_annual_savings = ft.Text("$149,796.00 / жыл", size=18, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_payback_years = ft.Text("3.4 жыл", size=16, weight=ft.FontWeight.BOLD, color=c["accent"])
-
-    def on_tariff_change(e):
-        t = sl_tariff.value or 0.12
-        txt_tariff_val.value = f"${t:.2f} / kWh"
-        daily_rev = 3420.5 * t
-        ann_sav = daily_rev * 365
-        txt_daily_revenue.value = f"${daily_rev:,.2f} / күн"
-        txt_annual_savings.value = f"${ann_sav:,.2f} / жыл"
-        txt_payback_years.value = f"{max(1.5, 500000 / ann_sav):.1f} жыл"
-        page.update()
-
-    sl_tariff.on_change = on_tariff_change
-
-    async def on_refresh(e=None):
-        progress_ring.visible = True
-        page.update()
-
-        data = await api_client.get_solarman_live(selected_sn)
-        # The dashboard nests its figures under generation/basic. Reading
-        # inverter_power_kw / daily_yield_kwh / ambient_temp_c off the top level
-        # always missed, so this screen quietly rendered its fallback constants
-        # (845.2 kW, 3.42 MWh) as if they were live telemetry.
-        gen = data.get("generation") or {}
-        basic = data.get("basic") or {}
-
-        def _set_ref(ref, value):
-            if ref.current is not None:
-                ref.current.value = value
-
-        if gen:
-            dc = (gen.get("dc") or [{}])[0]
-            ac = (gen.get("ac") or [{}])[0]
-            p_val = float(gen.get("ac_active_power_kw") or 0.0)
-            d_val = float(gen.get("e_today_kwh") or 0.0) / 1000.0
-            dc_total = float(gen.get("dc_total_kw") or 0.0)
-            temp_c = gen.get("temperature_c")
-
-            _set_ref(ref_kpi_power, f"{p_val:.1f}")
-            _set_ref(ref_kpi_daily, f"{d_val:.2f}")
-
-            txt_pv_v.value = f"{dc.get('voltage_v', 0)} V DC"
-            txt_pv_i.value = f"{dc.get('current_a', 0)} A DC"
-            txt_grid_v.value = f"{ac.get('voltage_v', 0)} V AC"
-            txt_grid_freq.value = f"{ac.get('frequency_hz', 0)} Hz"
-            # DC->AC conversion efficiency; the API reports no MPPT figure, so
-            # this is derived rather than the invented 98.4% that sat here.
-            txt_mppt_eff.value = f"{(p_val / dc_total * 100):.1f}%" if dc_total else "—"
-            txt_inv_temp.value = f"{temp_c} °C" if temp_c is not None else "—"
-
-            txt_status.value = (
-                "🟢 Normal Operation / Нормалды"
-                if basic.get("status") == 1
-                else "🔴 Offline / Байланыс жоқ"
-            )
-            txt_status.color = c["success"] if basic.get("status") == 1 else c["error"]
-            txt_weather.value = f"SN {basic.get('sn', selected_sn)} · дереккөз: {data.get('source', 'api')}"
-        else:
-            for t in (txt_pv_v, txt_pv_i, txt_grid_v,
-                      txt_grid_freq, txt_mppt_eff, txt_inv_temp):
-                t.value = "—"
-            _set_ref(ref_kpi_power, "—")
-            _set_ref(ref_kpi_daily, "—")
-            txt_status.value = "⚠️ Деректер қолжетімсіз"
-            txt_status.color = c["error"]
-            txt_weather.value = state.api_status_detail or "Серверден жауап жоқ"
-
-        progress_ring.visible = False
-        page.update()
-
-    # Inverter selector dropdown
-    def on_inverter_change(e):
-        nonlocal selected_sn
-        selected_sn = dd_inverters.value or "2501221272"
-        # Used to write a second set of constants per SN. /solarman/live takes
-        # a device_sn, so ask the backend for that inverter instead.
-        page.run_task(on_refresh)
-
-    dd_inverters = ft.Dropdown(
-        options=[
-            # No capacity in the label: these read "1000 kW" and "750 kW" while
-            # the plant reports 25 kW rated. Actual rating arrives in the
-            # response as basic.rated_power_kw.
-            ft.dropdown.Option("2501221272", "Инвертор #1 — SN 2501221272"),
-            ft.dropdown.Option("2411046235", "Инвертор #2 — SN 2411046235"),
-        ],
-        value="2501221272",
-        on_select=on_inverter_change,
-        expand=True,
-    )
-
-    btn_refresh = ft.IconButton(
-        icon=ft.Icons.REFRESH,
-        icon_color=c["primary"],
-        tooltip="Жаңарту",
-        on_click=lambda e: page.run_task(on_refresh),
-    )
-
-    status_card = ft.Container(
-        content=ft.Column(
-            [
-                ft.Row(
-                    [
-                        ft.Row([ft.Icon(ft.Icons.SENSORS, color=c["success"], size=20), ft.Text("Solarman Инвертор Сүйемелдеуі", weight=ft.FontWeight.BOLD, color=c["text_primary"])]),
-                        ft.Row([progress_ring, btn_refresh], spacing=4),
-                    ],
-                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+    def card(title: str) -> tuple:
+        """Section shell plus the column callers fill in."""
+        body = ft.Column([], spacing=6)
+        return (
+            ft.Container(
+                content=ft.Column(
+                    [ft.Text(title, size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]), body],
+                    spacing=8,
                 ),
-                dd_inverters,
-                ft.Container(height=4),
-                txt_status,
-                txt_weather,
-            ],
-            spacing=6,
-        ),
-        padding=14,
-        border_radius=14,
-        bgcolor=c["surface_variant"],
-        border=ft.Border.all(1, c["card_border"]),
-    )
+                padding=14,
+                border_radius=16,
+                bgcolor=c["surface_variant"],
+                border=ft.Border.all(1, c["card_border"]),
+            ),
+            body,
+        )
 
-    kpi_grid = ft.Row(
+    def kv_rows(pairs) -> list:
+        return [
+            ft.Row(
+                [
+                    ft.Text(str(k), size=12, color=c["text_secondary"]),
+                    ft.Text(str(v), size=12, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+                ],
+                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            )
+            for k, v in pairs
+        ]
+
+    # ---- status ----------------------------------------------------------
+    txt_status = ft.Text("Жүктелуде…", size=14, weight=ft.FontWeight.BOLD, color=c["text_secondary"])
+    txt_source = ft.Text("", size=11, color=c["text_secondary"])
+    progress = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2)
+
+    # ---- KPI cards -------------------------------------------------------
+    r_ac, r_ac_s = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+    r_dc, r_dc_s = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+    r_eff, r_eff_s = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+    r_temp, r_temp_s = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+    r_today, r_today_s = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+    r_total, r_total_s = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+
+    def kpi(title, unit, icon, accent, vref, sref):
+        return build_metric_card(title=title, value="—", unit=unit, icon=icon,
+                                 accent_color=accent, subtitle="…", value_ref=vref, subtitle_ref=sref)
+
+    kpi_grid = ft.Column(
         [
-            ft.Container(
-                build_metric_card(title=state.text("live_power"), value="—", unit="kW", icon=ft.Icons.POWER, accent_color=c["primary"], value_ref=ref_kpi_power),
-                expand=True,
-            ),
-            ft.Container(
-                build_metric_card(title=state.text("live_daily"), value="—", unit="MWh", icon=ft.Icons.WB_SUNNY, accent_color=c["accent"], value_ref=ref_kpi_daily),
-                expand=True,
-            ),
+            ft.Row([
+                ft.Container(kpi("AC қуаты", "kW", ft.Icons.BOLT, "#F59E0B", r_ac, r_ac_s), expand=True),
+                ft.Container(kpi("DC қуаты", "kW", ft.Icons.SOLAR_POWER, "#3B82F6", r_dc, r_dc_s), expand=True),
+            ], spacing=10),
+            ft.Row([
+                ft.Container(kpi("ПӘК (AC/DC)", "%", ft.Icons.SPEED, "#10B981", r_eff, r_eff_s), expand=True),
+                ft.Container(kpi("Температура", "°C", ft.Icons.THERMOSTAT, "#EC4899", r_temp, r_temp_s), expand=True),
+            ], spacing=10),
+            ft.Row([
+                ft.Container(kpi("Бүгінгі", "kWh", ft.Icons.TODAY, "#14B8A6", r_today, r_today_s), expand=True),
+                ft.Container(kpi("Жалпы", "kWh", ft.Icons.HISTORY, "#8B5CF6", r_total, r_total_s), expand=True),
+            ], spacing=10),
         ],
         spacing=10,
     )
 
-    # Detailed Electrical Parameters
-    parameters_card = ft.Container(
-        content=ft.Column(
-            [
-                ft.Text("⚡ Инверторлық Электрлік Спецификация", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
-                ft.Divider(height=6, color=c["card_border"]),
-                ft.Row([ft.Text("PV Кіріс Кернеуі (DC):", size=12, color=c["text_secondary"]), txt_pv_v], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("PV Ток Өндірісі (DC):", size=12, color=c["text_secondary"]), txt_pv_i], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("Шығыс Кернеуі (AC):", size=12, color=c["text_secondary"]), txt_grid_v], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("Желі Жиілігі (AC):", size=12, color=c["text_secondary"]), txt_grid_freq], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("MPPT Тиімділік ПӘК:", size=12, color=c["text_secondary"]), txt_mppt_eff], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("Инвертор Температурасы:", size=12, color=c["text_secondary"]), txt_inv_temp], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ],
-            spacing=8,
-        ),
-        padding=14,
-        border_radius=14,
-        bgcolor=c["surface_variant"],
-        border=ft.Border.all(1, c["card_border"]),
+    card_basic, body_basic = card("📋 Негізгі ақпарат")
+    card_version, body_version = card("🔧 Нұсқа ақпараты")
+    card_dc, body_dc = card("⚡ DC стрингтер (MPPT)")
+    card_ac, body_ac = card("🔌 AC фазалар")
+    card_weather, body_weather = card("🌤 Ауа райы (Түркістан)")
+    card_alert, body_alert = card("🔔 Күй тексерісі")
+
+    # ---- Performance Ratio ----------------------------------------------
+    txt_irr_val = ft.Text("800 W/m²", size=12, weight=ft.FontWeight.BOLD, color=c["primary"])
+    sl_irr = ft.Slider(min=1, max=1200, value=800, divisions=24)
+    card_pr, body_pr = card("📐 Өнімділік коэффициенті (PR)")
+    # Results live in their own column; writing them into body_pr would wipe
+    # out the slider above and leave the inputs unusable after the first load.
+    body_pr_result = ft.Column([], spacing=6)
+
+    # ---- ROI -------------------------------------------------------------
+    txt_capex_val = ft.Text("15 000 000 ₸", size=12, weight=ft.FontWeight.BOLD, color=c["primary"])
+    sl_capex = ft.Slider(min=1_000_000, max=60_000_000, value=15_000_000, divisions=59)
+    txt_tariff_val = ft.Text("28 ₸/kWh", size=12, weight=ft.FontWeight.BOLD, color=c["primary"])
+    sl_tariff = ft.Slider(min=5, max=120, value=28, divisions=23)
+    card_roi, body_roi = card("💰 Экономика (ROI, ₸)")
+    body_roi_result = ft.Column([], spacing=6)
+
+    def _num(x, default=0.0) -> float:
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return default
+
+    async def compute_pr() -> None:
+        gen = latest.get("generation") or {}
+        basic = latest.get("basic") or {}
+        if not gen:
+            return
+        res = await api_client.solarman_process(
+            active_power_kw=_num(gen.get("ac_active_power_kw")),
+            e_today_kwh=_num(gen.get("e_today_kwh")),
+            e_total_kwh=_num(gen.get("e_total_kwh")),
+            module_temp_c=_num(gen.get("temperature_c"), 25.0),
+            fault_code=0,
+            status=int(_num(basic.get("status"), 1)),
+            device_sn=str(basic.get("sn") or selected_sn),
+            dc_capacity_kwp=_num(basic.get("rated_power_kw"), 25.0),
+            irradiance_w_m2=float(sl_irr.value or 800),
+            ambient_temp_c=_num((latest.get("weather") or {}).get("temperature_2m_c"), 25.0),
+        )
+        if not res:
+            body_pr_result.controls = kv_rows([("Күй", "есептелмеді")])
+        else:
+            body_pr_result.controls = kv_rows([
+                ("Ағымдағы қуат", f"{_num(res.get('active_power_kw')):.3f} kW"),
+                ("Күтілетін қуат", f"{_num(res.get('expected_power_kw')):.2f} kW"),
+                ("Ұяшық температурасы", f"{_num(res.get('cell_temp_c')):.1f} °C"),
+                ("PR (шикі)", f"{_num(res.get('raw_pr')) * 100:.1f} %"),
+                ("PR (түзетілген)", f"{_num(res.get('corrected_pr')) * 100:.1f} %"),
+            ])
+        page.update()
+
+    async def compute_roi() -> None:
+        gen = latest.get("generation") or {}
+        res = await api_client.solarman_roi(
+            total_generation_kwh=_num(gen.get("e_total_kwh"), 45000.0),
+            initial_investment_kzt=float(sl_capex.value or 15_000_000),
+            tariff_kzt_per_kwh=float(sl_tariff.value or 28),
+        )
+        if not res:
+            body_roi_result.controls = kv_rows([("Күй", "есептелмеді")])
+        else:
+            body_roi_result.controls = kv_rows([
+                ("Инвестиция", f"{_num(res.get('initial_investment_kzt')):,.0f} ₸".replace(",", " ")),
+                ("Жиынтық үнем", f"{_num(res.get('cumulative_savings_kzt')):,.0f} ₸".replace(",", " ")),
+                ("Таза пайда", f"{_num(res.get('net_profit_kzt')):,.0f} ₸".replace(",", " ")),
+                ("ROI", f"{_num(res.get('roi_pct')):.1f} %"),
+                ("Өзін-өзі өтеу", f"{_num(res.get('payback_period_years')):.1f} жыл"),
+            ])
+        page.update()
+
+    async def load(e=None) -> None:
+        progress.visible = True
+        txt_status.value = "Жүктелуде…"
+        page.update()
+
+        data = await api_client.get_solarman_live(selected_sn)
+        gen = (data or {}).get("generation") or {}
+        basic = (data or {}).get("basic") or {}
+        version = (data or {}).get("version") or {}
+
+        if not gen:
+            reason = getattr(api_client_module, "last_http_error", "") or "жауап бос"
+            txt_status.value = "⚠️ Телеметрия қолжетімсіз"
+            txt_status.color = c["error"]
+            txt_source.value = reason
+            for body in (body_basic, body_version, body_dc, body_ac, body_pr_result, body_roi_result, body_alert):
+                body.controls = []
+            progress.visible = False
+            page.update()
+            return
+
+        latest.clear()
+        latest.update(data)
+
+        online = basic.get("status") == 1
+        txt_status.value = "🟢 Қалыпты жұмыс" if online else "🔴 Байланыс жоқ"
+        txt_status.color = c["success"] if online else c["error"]
+        txt_source.value = f"дереккөз: {data.get('source', '—')} · {str(data.get('fetched_at', ''))[:19]}"
+
+        ac_kw = _num(gen.get("ac_active_power_kw"))
+        dc_kw = _num(gen.get("dc_total_kw"))
+        rated = _num(basic.get("rated_power_kw"), 25.0)
+        # Near zero output the AC/DC ratio is just sensor noise — it read 120%
+        # at night, which is not a thing an inverter can do. Only report it
+        # once the array is producing something measurable.
+        eff_known = dc_kw >= max(0.2, rated * 0.01)
+        eff = (ac_kw / dc_kw * 100) if eff_known else 0.0
+
+        def setv(ref, sref, value, sub):
+            if ref.current is not None:
+                ref.current.value = value
+            if sref.current is not None:
+                sref.current.value = sub
+
+        setv(r_ac, r_ac_s, f"{ac_kw:.2f}", f"номинал {rated:.0f} kW")
+        setv(r_dc, r_dc_s, f"{dc_kw:.2f}", f"{len(gen.get('dc') or [])} стринг")
+        setv(r_eff, r_eff_s, f"{eff:.1f}" if eff_known else "—",
+             "AC / DC" if eff_known else "қуат тым төмен")
+        setv(r_temp, r_temp_s, f"{_num(gen.get('temperature_c')):.1f}", "инвертор")
+        setv(r_today, r_today_s, f"{_num(gen.get('e_today_kwh')):.1f}", "бүгінгі өндіріс")
+        setv(r_total, r_total_s, f"{_num(gen.get('e_total_kwh')):.0f}", "жұмыс ғұмырында")
+
+        body_basic.controls = kv_rows([
+            ("Сериялық нөмір", basic.get("sn", "—")),
+            ("Құрылғы ID", basic.get("device_id", "—")),
+            ("Түрі", basic.get("inverter_type", "—")),
+            ("Номинал қуат", f"{rated:.1f} kW"),
+            ("MPPT саны", basic.get("mppt_no", "—")),
+            ("Күй", "Онлайн" if online else "Офлайн"),
+        ])
+
+        body_version.controls = kv_rows([
+            ("Протокол", version.get("protocol_version", "—")),
+            ("Негізгі", version.get("main", "—")),
+            ("HMI", version.get("hmi", "—")),
+            ("Басқару SW", version.get("control_sw_v1", "—")),
+            ("Басқару SW v2", version.get("control_sw_v2", "—")),
+            ("Comm CPU", version.get("comm_cpu_sw", "—")),
+        ])
+
+        body_dc.controls = kv_rows([
+            (
+                s.get("mppt", f"PV{i + 1}"),
+                f"{_num(s.get('voltage_v')):.1f} V · {_num(s.get('current_a')):.1f} A · {_num(s.get('power_kw')):.2f} kW",
+            )
+            for i, s in enumerate(gen.get("dc") or [])
+        ]) or kv_rows([("Стрингтер", "деректер жоқ")])
+
+        body_ac.controls = kv_rows([
+            (
+                f"Фаза {p.get('phase', '?')}",
+                f"{_num(p.get('voltage_v')):.1f} V · {_num(p.get('current_a')):.1f} A"
+                + (f" · {_num(p.get('frequency_hz')):.2f} Hz" if p.get("frequency_hz") is not None else "")
+                + f" · {_num(p.get('power_kw')):.2f} kW",
+            )
+            for p in (gen.get("ac") or [])
+        ]) or kv_rows([("Фазалар", "деректер жоқ")])
+
+        weather = await api_client.get_weather()
+        if weather:
+            latest["weather"] = weather
+            body_weather.controls = kv_rows([
+                ("Орналасқан жері", weather.get("location", "—")),
+                ("Температура", f"{_num(weather.get('temperature_2m_c')):.1f} °C"),
+                ("Бұлттылық", f"{_num(weather.get('cloud_cover_pct')):.0f} %"),
+                ("UV индексі", f"{_num(weather.get('uv_index')):.1f}"),
+                ("Дереккөз", weather.get("source", "—")),
+            ])
+        else:
+            body_weather.controls = kv_rows([("Ауа райы", "қолжетімсіз")])
+
+        alert = await api_client.solarman_alert({
+            "deviceSn": str(basic.get("sn") or selected_sn),
+            "deviceId": basic.get("device_id"),
+            "faultCode": 0,
+            "deviceStatus": basic.get("status", 1),
+        })
+        if alert:
+            msg = alert.get("alert_message") or "Ескерту жоқ"
+            body_alert.controls = kv_rows([
+                ("Офлайн", "иә" if alert.get("is_offline") else "жоқ"),
+                ("Ақау", "иә" if alert.get("is_faulty") else "жоқ"),
+                ("Хабарлама жіберілді", "иә" if alert.get("alert_sent") else "жоқ"),
+            ]) + [ft.Text(msg[:160], size=11, color=c["text_secondary"])]
+        else:
+            body_alert.controls = kv_rows([("Тексеріс", "орындалмады")])
+
+        await compute_pr()
+        await compute_roi()
+
+        progress.visible = False
+        page.update()
+
+    # ---- interactions ----------------------------------------------------
+    async def on_inverter_change(e):
+        nonlocal selected_sn
+        selected_sn = dd_inverters.value or INVERTERS[0]
+        await load()
+
+    dd_inverters = ft.Dropdown(
+        label="Инвертор",
+        value=selected_sn,
+        options=[ft.DropdownOption(key=sn, text=f"SN {sn}") for sn in INVERTERS],
+        # flet 0.86 renamed the Dropdown callback: on_change no longer exists.
+        on_select=on_inverter_change,
+        dense=True,
     )
 
-    # Economics & ROI Payback Calculator
-    roi_card = ft.Container(
-        content=ft.Column(
-            [
-                ft.Row([ft.Icon(ft.Icons.MONETIZATION_ON, color=c["success"], size=20), ft.Text("💰 Экономикалық ROI & Өзін-өзі өтеу есептегіші", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"])]),
-                ft.Divider(height=6, color=c["card_border"]),
-                ft.Row([ft.Text("Электр энергия тарифі:"), txt_tariff_val], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                sl_tariff,
-                ft.Container(height=4),
-                ft.Row([ft.Text("Күндік Таза Табыс:", size=12, color=c["text_secondary"]), txt_daily_revenue], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("Жылдық Экономикалық Пайда:", size=12, color=c["text_secondary"]), txt_annual_savings], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("Жобаның Өзін-өзі Өтеу Жылы:", size=12, color=c["text_secondary"]), txt_payback_years], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ],
-            spacing=8,
-        ),
-        padding=14,
-        border_radius=14,
-        bgcolor=c["surface_variant"],
-        border=ft.Border.all(1, c["card_border"]),
+    async def on_irr_change(e):
+        txt_irr_val.value = f"{float(sl_irr.value):.0f} W/m²"
+        page.update()
+        await compute_pr()
+
+    async def on_money_change(e):
+        txt_capex_val.value = f"{float(sl_capex.value):,.0f} ₸".replace(",", " ")
+        txt_tariff_val.value = f"{float(sl_tariff.value):.0f} ₸/kWh"
+        page.update()
+        await compute_roi()
+
+    sl_irr.on_change = on_irr_change
+    sl_capex.on_change = on_money_change
+    sl_tariff.on_change = on_money_change
+
+    btn_refresh = ft.ElevatedButton(
+        content=ft.Row([ft.Icon(ft.Icons.REFRESH, size=16), ft.Text("Жаңарту")],
+                       alignment=ft.MainAxisAlignment.CENTER),
+        on_click=load,
+        style=ft.ButtonStyle(bgcolor=c["primary"], color="#FFFFFF",
+                             shape=ft.RoundedRectangleBorder(radius=12)),
     )
 
-    alerts_box = ft.Container(
-        content=ft.Column(
-            [
-                ft.Row([ft.Icon(ft.Icons.WARNING_AMBER, color=c["warning"]), ft.Text(state.text("live_alerts"), weight=ft.FontWeight.BOLD, color=c["text_primary"])]),
-                ft.Text("• MPPT #1 & MPPT #2 кіріс кернеуі оңтайлы (98.4%)", size=12, color=c["text_secondary"]),
-                ft.Text("• Желілік синусоида және 50.01 Hz жиілігі тұрақты", size=12, color=c["text_secondary"]),
-                ft.Text("• Автоматты салқындату желдеткіштері: Идеалды", size=12, color=c["text_secondary"]),
-            ],
-            spacing=6,
-        ),
-        padding=14,
-        border_radius=14,
-        bgcolor=c["surface_variant"],
-        border=ft.Border.all(1, c["card_border"]),
-    )
-
-    # Load once on build and again on every visit — the screen previously
-    # waited for a manual "Жаңарту" tap and otherwise sat on its constants.
-    page.run_task(on_refresh)
+    body_pr.controls = [
+        ft.Row([ft.Text("Күн радиациясы:", size=12, color=c["text_secondary"]), txt_irr_val],
+               alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        sl_irr,
+        body_pr_result,
+    ]
+    body_roi.controls = [
+        ft.Row([ft.Text("Инвестиция (CAPEX):", size=12, color=c["text_secondary"]), txt_capex_val],
+               alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        sl_capex,
+        ft.Row([ft.Text("Тариф:", size=12, color=c["text_secondary"]), txt_tariff_val],
+               alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+        sl_tariff,
+        body_roi_result,
+    ]
 
     view = ft.ListView(
         controls=[
-            ft.Row(
-                [
-                    ft.Text("📡 " + state.text("live_title"), size=18, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
-                    ft.ElevatedButton(
-                        "Жаңарту",
-                        icon=ft.Icons.REFRESH,
-                        on_click=lambda e: page.run_task(on_refresh),
-                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=8)),
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            ),
-            status_card,
+            ft.Text("📡 " + state.text("live_title"), size=18, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Row([dd_inverters, progress], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Row([txt_status], alignment=ft.MainAxisAlignment.START),
+            txt_source,
+            btn_refresh,
+            ft.Container(height=6),
             kpi_grid,
-            parameters_card,
-            roi_card,
-            alerts_box,
+            ft.Container(height=6),
+            card_basic,
+            card_version,
+            card_dc,
+            card_ac,
+            card_weather,
+            card_pr,
+            card_roi,
+            card_alert,
             ft.Container(height=20),
         ],
-        spacing=12,
+        spacing=10,
         padding=12,
+        expand=True,
     )
-    view.data = on_refresh
+    # Re-fetched whenever the tab is opened (see on_nav_change in main.py).
+    view.data = load
     return view
