@@ -39,7 +39,7 @@ def build_settings_view(page: ft.Page, on_refresh_all: Callable[[], None]) -> ft
         border_radius=10,
         bgcolor=c["surface_variant"],
     )
-    txt_status_msg = ft.Text("", size=12, color=c["text_secondary"])
+    txt_status_msg = ft.Text("", size=12, color=c["text_secondary"], selectable=True)
 
     async def on_test_conn(e):
         res = await api_client.check_health()
@@ -47,7 +47,13 @@ def build_settings_view(page: ft.Page, on_refresh_all: Callable[[], None]) -> ft
             txt_status_msg.value = state.text("st_status_ok")
             txt_status_msg.color = c["success"]
         else:
-            txt_status_msg.value = state.text("st_status_err")
+            # Show what actually failed. A bare "no internet" sent us chasing
+            # the network when the real cause was certificate verification.
+            detail = state.api_status_detail
+            txt_status_msg.value = (
+                f"{state.text('st_status_err')}\n\n{detail}" if detail
+                else state.text("st_status_err")
+            )
             txt_status_msg.color = c["error"]
         on_refresh_all()
         page.update()
