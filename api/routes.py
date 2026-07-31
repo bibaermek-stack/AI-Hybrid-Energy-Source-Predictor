@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
 import joblib
 import numpy as np
 import pandas as pd
@@ -14,6 +14,8 @@ from api.schemas import (
     SolarmanProcessRequest, SolarmanProcessResponse, SolarmanRoiRequest, SolarmanRoiResponse,
     SolarmanAlertRequest, SolarmanAlertResponse
 )
+from starlette.concurrency import run_in_threadpool
+
 from api.security import require_api_key
 from src.monitoring.model_monitor import PredictionLogger
 from src.llm_agent.energy_advisor import explain_energy, chat_advisor
@@ -380,6 +382,89 @@ def check_and_alert_solarman(request: SolarmanAlertRequest):
     except Exception as e:
         logger.error(f"Error executing status check and alert: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error while executing status check and alert")
+
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
+
+_yolo_detector = None
+
+
+def _get_yolo_detector():
+    """Lazily build the detector; loading YOLO costs seconds and memory."""
+    global _yolo_detector
+    if _yolo_detector is None:
+        from src.fault_detection.yolo.detector import YOLOFaultDetector
+
+        _yolo_detector = YOLOFaultDetector()
+    return _yolo_detector
+
+
+@router.post("/detect")
+async def detect_faults(file: UploadFile = File(...), conf: float = 0.25):
+    """
+    Run YOLO panel-fault detection on an uploaded image.
+
+    Returns every detection with class, confidence and box, plus the highest
+    confidence one as `primary` for callers that just want a verdict.
+    """
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported image type {file.content_type!r}. "
+            f"Expected one of: {', '.join(sorted(ALLOWED_IMAGE_TYPES))}",
+        )
+
+    payload = await file.read()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty upload.")
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image is {len(payload)} bytes; limit is {MAX_UPLOAD_BYTES}.",
+        )
+
+    import tempfile
+
+    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(payload)
+            tmp_path = Path(tmp.name)
+
+        detector = _get_yolo_detector()
+        detector.conf = max(0.0, min(1.0, float(conf)))
+        detections = await run_in_threadpool(detector.predict, tmp_path)
+    except FileNotFoundError as e:
+        # Weights absent — the deployment cannot do CV, say so rather than
+        # returning an empty detection list that reads as "panel is clean".
+        logger.error("YOLO weights missing: %s", e)
+        raise HTTPException(status_code=503, detail=f"Detector unavailable: {e}")
+    except ImportError as e:
+        logger.error("ultralytics not installed: %s", e)
+        raise HTTPException(status_code=503, detail=f"Detector unavailable: {e}")
+    except Exception as e:
+        logger.error("detection failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if tmp_path is not None:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
+    items = [
+        {"class_name": d.class_name, "confidence": round(d.confidence, 4), "box": d.box}
+        for d in detections
+    ]
+    items.sort(key=lambda d: d["confidence"], reverse=True)
+    return {
+        "filename": file.filename,
+        "count": len(items),
+        "detections": items,
+        "primary": items[0] if items else None,
+    }
 
 
 class SolarmanCredsRequest(BaseModel):

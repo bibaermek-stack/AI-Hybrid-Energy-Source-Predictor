@@ -84,6 +84,56 @@ def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) ->
     return None
 
 
+def _http_post_file_sync(
+    url: str,
+    content: bytes,
+    filename: str,
+    content_type: str,
+    timeout: float = 30.0,
+) -> Optional[Dict[str, Any]]:
+    """Multipart POST of a single file, hand-rolled to stay on the stdlib."""
+    global last_http_error
+    import uuid
+
+    boundary = uuid.uuid4().hex
+    body = b"".join(
+        [
+            f"--{boundary}\r\n".encode(),
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(),
+            f"Content-Type: {content_type}\r\n\r\n".encode(),
+            content,
+            f"\r\n--{boundary}--\r\n".encode(),
+        ]
+    )
+    try:
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "User-Agent": "EcoPredict-Mobile/1.0",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8"))
+            last_http_error = f"HTTP {resp.status} from {url}"
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = json.loads(e.read().decode("utf-8")).get("detail", "")
+        except Exception:
+            pass
+        last_http_error = f"HTTP {e.code}: {detail or e.reason}"
+        logger.warning("Upload rejected by %s: %s", url, last_http_error)
+    except Exception as e:
+        last_http_error = f"{type(e).__name__}: {e}"
+        logger.warning("Upload error for %s: %s", url, e)
+    return None
+
+
 class APIClient:
     """Handles REST API communication with FastAPI backend without third-party dependencies."""
 
@@ -238,6 +288,20 @@ class APIClient:
         return (
             "EcoPredict AI: Негізгі сервер уақытша офлайн. "
             "Бірақ жергілікті режимде барлық есептеулер жұмыс істейді!"
+        )
+
+    async def detect_fault(
+        self, content: bytes, filename: str = "panel.jpg", content_type: str = "image/jpeg"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run YOLO panel diagnosis on an image via POST /detect.
+
+        None means the request failed; last_http_error holds why. An empty
+        detections list is a real answer — the model found nothing.
+        """
+        url = f"{state.api_base_url}/detect"
+        return await asyncio.to_thread(
+            _http_post_file_sync, url, content, filename, content_type, 60.0
         )
 
     async def get_forecast(self, dc_capacity_kwp: float = 50.0) -> Optional[List[Dict[str, Any]]]:
