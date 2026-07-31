@@ -240,6 +240,22 @@ class APIClient:
             "Бірақ жергілікті режимде барлық есептеулер жұмыс істейді!"
         )
 
+    async def get_forecast(self, dc_capacity_kwp: float = 50.0) -> Optional[List[Dict[str, Any]]]:
+        """
+        24-hour hourly solar generation forecast.
+
+        Returns None rather than a fabricated curve when the backend cannot
+        answer, so the caller can say why instead of inventing numbers. The
+        server needs WEATHERAPI_KEY configured or this route returns 500.
+        """
+        url = f"{state.api_base_url}/solarman/forecast?dc_capacity_kwp={dc_capacity_kwp}"
+        res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
+        if res and isinstance(res, dict):
+            forecasts = res.get("forecasts")
+            if isinstance(forecasts, list) and forecasts:
+                return forecasts
+        return None
+
     async def get_solarman_live(self, device_sn: str = "") -> Dict[str, Any]:
         """Fetch Solarman live plant telemetry for a specific inverter SN."""
         # /solarman/live is a GET; POSTing to it returned 405 every time, which
