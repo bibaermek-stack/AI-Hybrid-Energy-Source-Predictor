@@ -280,8 +280,10 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
 
         page.update()
 
-    page.run_task(load_live_data)
-
+    # Deliberately not started here: build_overview_view runs while main() is
+    # still swapping the splash screen for the dashboard, and a concurrent
+    # page.update() from this task raced that transition. main() kicks off the
+    # first load once the dashboard is actually mounted.
     view = ft.ListView(
         controls=[
             hero_card,

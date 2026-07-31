@@ -173,9 +173,12 @@ async def main(page: ft.Page):
     page.update()
 
     try:
-        await asyncio.wait_for(health_task, timeout=2.0)
+        # shield so a slow backend does not get the health check cancelled —
+        # wait_for kills the task on timeout, which left the app permanently
+        # "offline" whenever the container took more than 2s to wake up.
+        await asyncio.wait_for(asyncio.shield(health_task), timeout=2.0)
     except Exception:
-        pass
+        pass  # still running; it updates the header when it lands
 
     progress_bar.value = 1.0
     txt_loading_status.value = "Жүйе сәтті іске қосылды! 🚀"
@@ -188,6 +191,11 @@ async def main(page: ft.Page):
     page.appbar = build_app_header(page, refresh_ui)
     page.navigation_bar = build_bottom_nav(0, lambda e: on_nav_change(view_keys[e.control.selected_index] if e.control.selected_index < len(view_keys) else "overview"))
     page.update()
+
+    # Only now that the dashboard is mounted is it safe to fetch live figures.
+    overview_reload = getattr(views["overview"], "data", None)
+    if callable(overview_reload):
+        page.run_task(overview_reload)
 
 
 if __name__ == "__main__":
