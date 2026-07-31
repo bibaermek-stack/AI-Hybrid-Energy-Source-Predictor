@@ -18,6 +18,9 @@ class AppState:
         self.api_base_url: str = DEFAULT_API_BASE
         self.is_api_online: bool = False
         self.models_loaded: Dict[str, bool] = {"solar": False, "wind": False}
+        # Why the last health check failed — shown in Settings so a broken
+        # backend is diagnosable from the phone instead of silently 404-ing.
+        self.api_status_detail: str = ""
 
         # Telemetry sliders state
         self.irradiation: float = 900.0

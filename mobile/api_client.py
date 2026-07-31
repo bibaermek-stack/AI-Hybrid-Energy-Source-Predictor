@@ -60,31 +60,69 @@ class APIClient:
     def __init__(self, timeout: float = 5.0):
         self.timeout = timeout
 
+    @staticmethod
+    def _serves_feature_routes(res: Dict[str, Any]) -> bool:
+        """
+        Whether a /health reply comes from a backend that actually mounts
+        /predict, /chat and /solarman/*.
+
+        main.py answers /health even when the API router fails to import, so a
+        plain 200 proves nothing — accepting it makes the app report "online"
+        while every feature 404s. `api: "full"` is the explicit contract;
+        `forecast_backend` is what api/routes.py has always returned.
+        """
+        return res.get("api") == "full" or "forecast_backend" in res
+
     async def check_health(self) -> Dict[str, Any]:
-        """Check FastAPI backend health status with dynamic fallback support."""
+        """Find a backend that serves the feature routes, not just /health."""
         candidates = [
             state.api_base_url.strip().rstrip("/"),
             "https://ecopradict-mobile-production.up.railway.app",
-            "https://www.ecopredict.kz",
             "https://ecopradict-ai-production.up.railway.app",
+            "https://www.ecopredict.kz",
+            # Android blocks cleartext HTTP by default (targetSdk >= 28), so
+            # these only ever resolve in the desktop/web preview.
             "http://127.0.0.1:8001",
             "http://127.0.0.1:8555",
         ]
         unique_candidates = [c for c in list(dict.fromkeys(candidates)) if c]
 
+        stub_hosts: List[str] = []
         for base_url in unique_candidates:
             url = f"{base_url}/health"
-            res = await asyncio.to_thread(_http_get_sync, url, 1.5)
-            if res and isinstance(res, dict):
-                state.is_api_online = True
-                state.api_base_url = base_url
-                state.models_loaded = res.get("models_loaded", {"solar": True, "wind": True})
-                logger.info(f"API Health Check SUCCESS on {base_url}")
-                return res
+            # 1.5s was too tight for a cold mobile connection.
+            res = await asyncio.to_thread(_http_get_sync, url, 6.0)
+            if not (res and isinstance(res, dict)):
+                continue
+            if not self._serves_feature_routes(res):
+                err = res.get("api_router_error") or "feature routes not mounted"
+                stub_hosts.append(f"{base_url} ({err})")
+                logger.warning("Skipping %s — /health answers but %s", base_url, err)
+                continue
 
-        # Always enable online mode for local client fallback
-        state.is_api_online = True
-        return {"status": "healthy", "models_loaded": {"solar": True, "wind": True}}
+            state.is_api_online = True
+            state.api_base_url = base_url
+            state.models_loaded = res.get("models_loaded", {"solar": False, "wind": False})
+            state.api_status_detail = ""
+            logger.info("API health check succeeded on %s", base_url)
+            return res
+
+        # No usable backend. Report it instead of faking a healthy status —
+        # a green indicator over a dead API is worse than an honest error.
+        state.is_api_online = False
+        state.models_loaded = {"solar": False, "wind": False}
+        state.api_status_detail = (
+            "Backend reachable but incomplete: " + "; ".join(stub_hosts)
+            if stub_hosts
+            else "No backend responded. Check the API URL in Settings (HTTPS required on Android)."
+        )
+        logger.error("API health check failed: %s", state.api_status_detail)
+        return {
+            "status": "offline",
+            "api": "none",
+            "detail": state.api_status_detail,
+            "models_loaded": {"solar": False, "wind": False},
+        }
 
     async def predict(
         self,

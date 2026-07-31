@@ -2,8 +2,12 @@
 Config, themes, colors, and localization dictionaries for EcoPredict AI Mobile.
 """
 
-# Default FastAPI Backend URL (Railway 24/7 TCP Proxy Public URL for Port 8001)
-DEFAULT_API_BASE = "http://sakura.proxy.rlwy.net:35462"
+# Default FastAPI backend (Railway public domain -> container port 8001).
+# Must stay HTTPS: Android blocks cleartext HTTP by default from targetSdk 28,
+# so an http:// base silently fails in the APK no matter what the server does.
+# The previous default (http://sakura.proxy.rlwy.net:35462) was both plaintext
+# and pointing at a TCP proxy that no longer forwards to a live service.
+DEFAULT_API_BASE = "https://ecopradict-mobile-production.up.railway.app"
 
 # App Colors - Dark & Light Palettes
 COLORS = {

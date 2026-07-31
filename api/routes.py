@@ -62,6 +62,9 @@ def health_check():
     """Model health for the dashboard (RF solar + XGB wind). No TensorFlow/LSTM."""
     return {
         "status": "healthy" if solar_model and wind_model else "degraded",
+        # Marks a backend that actually mounts the feature routes; clients use
+        # this to avoid locking onto a stub that only answers /health.
+        "api": "full",
         "models_loaded": {
             "solar": solar_model is not None,
             "wind": wind_model is not None,

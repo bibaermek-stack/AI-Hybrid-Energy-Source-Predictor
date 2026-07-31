@@ -54,6 +54,43 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API routes.
+# Everything the mobile app calls (/predict, /chat, /solarman/*) lives in this
+# router. When it fails to import, the service still answers — but with only "/"
+# and "/health" — which is how a deployment ends up 404-ing every feature while
+# still looking healthy. Record the failure so /health can report it.
+api_router_loaded = False
+api_router_error: str | None = None
+try:
+    from api.routes import router as api_router
+
+    app.include_router(api_router)
+    api_router_loaded = True
+    logger.info("API Router included successfully.")
+except Exception as err:
+    api_router_error = f"{type(err).__name__}: {err}"
+    logger.error(
+        "Could not include api_router — /predict, /chat and /solarman/* will 404: %s",
+        err,
+        exc_info=True,
+    )
+
+
+def _real_models_loaded() -> dict:
+    """Actual model state rather than a hardcoded guess."""
+    if not api_router_loaded:
+        return {"solar": False, "wind": False}
+    try:
+        from api import routes
+
+        return {
+            "solar": routes.solar_model is not None,
+            "wind": routes.wind_model is not None,
+        }
+    except Exception:
+        return {"solar": False, "wind": False}
+
+
 @app.get("/")
 async def root():
     return {
@@ -61,24 +98,27 @@ async def root():
         "service": "EcoPredict AI Mobile Backend",
         "database_url_configured": bool(DATABASE_URL),
         "database_status": db_status,
+        "api_router_loaded": api_router_loaded,
         "version": "2.0.0",
     }
 
+
 @app.get("/health")
 async def health_check():
-    return {
-        "status": "healthy",
-        "database": db_status,
-        "models_loaded": {"solar": True, "wind": True},
-    }
+    """
+    Degraded-mode health reply.
 
-# Include API routes
-try:
-    from api.routes import router as api_router
-    app.include_router(api_router)
-    logger.info("API Router included successfully.")
-except Exception as err:
-    logger.warning("Could not include api_router: %s", err)
+    `api` is the field clients use to tell a fully-wired backend from this stub —
+    it must never say "full" unless the feature routes are actually mounted.
+    """
+    models = _real_models_loaded()
+    return {
+        "status": "healthy" if api_router_loaded and all(models.values()) else "degraded",
+        "api": "full" if api_router_loaded else "stub",
+        "database": db_status,
+        "models_loaded": models,
+        "api_router_error": api_router_error,
+    }
 
 # Serve static files
 static_dir = _DIR / "static"
