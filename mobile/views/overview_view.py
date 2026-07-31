@@ -28,7 +28,9 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
                             content=ft.Text("AI · Energy · Education", size=10, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                             padding=ft.Padding.symmetric(horizontal=8, vertical=4),
                             border_radius=10,
-                            bgcolor="rgba(255,255,255,0.2)",
+                            # CSS rgba() is not a colour Flutter can parse; it
+                            # blanked the whole screen rather than falling back.
+                            bgcolor=ft.Colors.with_opacity(0.2, ft.Colors.WHITE),
                         ),
                     ]
                 ),
@@ -41,7 +43,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
                 ft.Text(
                     state.text("ov_hero_sub"),
                     size=12,
-                    color="rgba(255,255,255,0.85)",
+                    color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE),
                 ),
             ],
             spacing=8,
@@ -280,8 +282,10 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
 
         page.update()
 
-    page.run_task(load_live_data)
-
+    # Deliberately not started here: build_overview_view runs while main() is
+    # still swapping the splash screen for the dashboard, and a concurrent
+    # page.update() from this task raced that transition. main() kicks off the
+    # first load once the dashboard is actually mounted.
     view = ft.ListView(
         controls=[
             hero_card,
@@ -297,6 +301,9 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         ],
         spacing=10,
         padding=12,
+        # A ListView needs a bounded height; without expand it collapses to
+        # nothing inside the dashboard container and the screen renders blank.
+        expand=True,
     )
     # main.py caches views in a dict and never rebuilds them, so without this
     # the "Real-time" panel would keep showing whatever it read at app launch.

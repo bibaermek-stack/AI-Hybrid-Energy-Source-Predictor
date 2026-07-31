@@ -1,6 +1,8 @@
 # Core API & UI
 fastapi>=0.110
 uvicorn[standard]>=0.27
+# Required by FastAPI to parse multipart uploads (POST /detect)
+python-multipart>=0.0.9
 streamlit>=1.32
 flet>=0.21.0
 nicegui>=1.4.0

@@ -84,6 +84,56 @@ def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) ->
     return None
 
 
+def _http_post_file_sync(
+    url: str,
+    content: bytes,
+    filename: str,
+    content_type: str,
+    timeout: float = 30.0,
+) -> Optional[Dict[str, Any]]:
+    """Multipart POST of a single file, hand-rolled to stay on the stdlib."""
+    global last_http_error
+    import uuid
+
+    boundary = uuid.uuid4().hex
+    body = b"".join(
+        [
+            f"--{boundary}\r\n".encode(),
+            f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode(),
+            f"Content-Type: {content_type}\r\n\r\n".encode(),
+            content,
+            f"\r\n--{boundary}--\r\n".encode(),
+        ]
+    )
+    try:
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+                "User-Agent": "EcoPredict-Mobile/1.0",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8"))
+            last_http_error = f"HTTP {resp.status} from {url}"
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            detail = json.loads(e.read().decode("utf-8")).get("detail", "")
+        except Exception:
+            pass
+        last_http_error = f"HTTP {e.code}: {detail or e.reason}"
+        logger.warning("Upload rejected by %s: %s", url, last_http_error)
+    except Exception as e:
+        last_http_error = f"{type(e).__name__}: {e}"
+        logger.warning("Upload error for %s: %s", url, e)
+    return None
+
+
 class APIClient:
     """Handles REST API communication with FastAPI backend without third-party dependencies."""
 
@@ -239,6 +289,115 @@ class APIClient:
             "EcoPredict AI: Негізгі сервер уақытша офлайн. "
             "Бірақ жергілікті режимде барлық есептеулер жұмыс істейді!"
         )
+
+    async def get_weather(self) -> Optional[Dict[str, Any]]:
+        """Current Turkistan conditions (GET /solarman/weather)."""
+        return await asyncio.to_thread(
+            _http_get_sync, f"{state.api_base_url}/solarman/weather", self.timeout
+        )
+
+    async def solarman_process(
+        self,
+        active_power_kw: float,
+        e_today_kwh: float,
+        e_total_kwh: float,
+        module_temp_c: float,
+        fault_code: int,
+        status: int,
+        device_sn: str,
+        dc_capacity_kwp: float,
+        irradiance_w_m2: float,
+        ambient_temp_c: float,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Performance Ratio via POST /solarman/process.
+
+        The dashboard builds this payload from numbers typed by hand; here the
+        readings come straight off the inverter.
+        """
+        payload = {
+            "payload": {
+                "status": status,
+                "deviceSn": device_sn,
+                "dataList": [
+                    {"key": "APo", "value": str(active_power_kw), "unit": "kW"},
+                    {"key": "eToday", "value": str(e_today_kwh), "unit": "kWh"},
+                    {"key": "eTotal", "value": str(e_total_kwh), "unit": "kWh"},
+                    {"key": "T_val", "value": str(module_temp_c), "unit": "°C"},
+                    {"key": "faultCode", "value": str(fault_code), "unit": None},
+                ],
+            },
+            "dc_capacity_kwp": dc_capacity_kwp,
+            # The endpoint rejects irradiance <= 0, so keep a floor for night-time.
+            "irradiance_w_m2": max(1.0, irradiance_w_m2),
+            "ambient_temp_c": ambient_temp_c,
+        }
+        return await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/solarman/process", payload, self.timeout
+        )
+
+    async def solarman_roi(
+        self,
+        total_generation_kwh: float,
+        initial_investment_kzt: float,
+        tariff_kzt_per_kwh: float,
+        opex_annual_kzt: float = 50000.0,
+        annual_degradation: float = 0.005,
+        inflation_rate: float = 0.05,
+        lifetime_years: int = 25,
+    ) -> Optional[Dict[str, Any]]:
+        """Lifetime economics in KZT via POST /solarman/roi."""
+        payload = {
+            "total_generation_kwh": total_generation_kwh,
+            "initial_investment_kzt": initial_investment_kzt,
+            "tariff_kzt_per_kwh": tariff_kzt_per_kwh,
+            "opex_annual_kzt": opex_annual_kzt,
+            "annual_degradation": annual_degradation,
+            "inflation_rate": inflation_rate,
+            "lifetime_years": lifetime_years,
+        }
+        return await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/solarman/roi", payload, self.timeout
+        )
+
+    async def solarman_alert(self, parsed_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Offline / fault check via POST /solarman/alert."""
+        return await asyncio.to_thread(
+            _http_post_sync,
+            f"{state.api_base_url}/solarman/alert",
+            {"parsed_data": parsed_data},
+            self.timeout,
+        )
+
+    async def detect_fault(
+        self, content: bytes, filename: str = "panel.jpg", content_type: str = "image/jpeg"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Run YOLO panel diagnosis on an image via POST /detect.
+
+        None means the request failed; last_http_error holds why. An empty
+        detections list is a real answer — the model found nothing.
+        """
+        url = f"{state.api_base_url}/detect"
+        return await asyncio.to_thread(
+            _http_post_file_sync, url, content, filename, content_type, 60.0
+        )
+
+    async def get_forecast(self, dc_capacity_kwp: float = 50.0) -> Optional[List[Dict[str, Any]]]:
+        """
+        24-hour hourly solar generation forecast.
+
+        Returns None rather than a fabricated curve when the backend cannot
+        answer, so the caller can say why instead of inventing numbers. The
+        server needs WEATHERAPI_KEY configured or this route returns 500.
+        """
+        url = f"{state.api_base_url}/solarman/forecast?dc_capacity_kwp={dc_capacity_kwp}"
+        res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
+        if res and isinstance(res, dict):
+            forecasts = res.get("forecasts")
+            if isinstance(forecasts, list) and forecasts:
+                return forecasts
+        return None
 
     async def get_solarman_live(self, device_sn: str = "") -> Dict[str, Any]:
         """Fetch Solarman live plant telemetry for a specific inverter SN."""

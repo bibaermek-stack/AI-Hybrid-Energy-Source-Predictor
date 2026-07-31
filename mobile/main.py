@@ -66,13 +66,13 @@ async def main(page: ft.Page):
         "AI модельдері дайындалуда...",
         size=12,
         weight=ft.FontWeight.W_500,
-        color="rgba(255, 255, 255, 0.7)",
+        color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
     )
     progress_bar = ft.ProgressBar(
         value=0.2,
         width=240,
         color="#3B82F6",
-        bgcolor="rgba(255, 255, 255, 0.15)",
+        bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
         border_radius=6,
     )
 
@@ -84,8 +84,8 @@ async def main(page: ft.Page):
                     content=ft.Icon(ft.Icons.ENERGY_SAVINGS_LEAF, color="#3B82F6", size=72),
                     padding=24,
                     border_radius=40,
-                    bgcolor="rgba(59, 130, 246, 0.15)",
-                    border=ft.Border.all(1, "rgba(59, 130, 246, 0.3)"),
+                    bgcolor=ft.Colors.with_opacity(0.15, "#3B82F6"),
+                    border=ft.Border.all(1, ft.Colors.with_opacity(0.3, "#3B82F6")),
                 ),
                 ft.Container(height=20),
                 ft.Text(
@@ -97,7 +97,7 @@ async def main(page: ft.Page):
                 ft.Text(
                     "Гибридті ЖЭК үшін ақылды білім беру платформасы",
                     size=12,
-                    color="rgba(255, 255, 255, 0.75)",
+                    color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE),
                     text_align=ft.TextAlign.CENTER,
                 ),
                 ft.Container(height=40),
@@ -173,9 +173,12 @@ async def main(page: ft.Page):
     page.update()
 
     try:
-        await asyncio.wait_for(health_task, timeout=2.0)
+        # shield so a slow backend does not get the health check cancelled —
+        # wait_for kills the task on timeout, which left the app permanently
+        # "offline" whenever the container took more than 2s to wake up.
+        await asyncio.wait_for(asyncio.shield(health_task), timeout=2.0)
     except Exception:
-        pass
+        pass  # still running; it updates the header when it lands
 
     progress_bar.value = 1.0
     txt_loading_status.value = "Жүйе сәтті іске қосылды! 🚀"
@@ -188,6 +191,11 @@ async def main(page: ft.Page):
     page.appbar = build_app_header(page, refresh_ui)
     page.navigation_bar = build_bottom_nav(0, lambda e: on_nav_change(view_keys[e.control.selected_index] if e.control.selected_index < len(view_keys) else "overview"))
     page.update()
+
+    # Only now that the dashboard is mounted is it safe to fetch live figures.
+    overview_reload = getattr(views["overview"], "data", None)
+    if callable(overview_reload):
+        page.run_task(overview_reload)
 
 
 if __name__ == "__main__":
