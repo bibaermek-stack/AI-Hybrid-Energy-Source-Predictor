@@ -20,6 +20,10 @@ description = "EcoPredict AI — cross-platform mobile client"
 requires-python = ">=3.9"
 dependencies = [
     "flet",
+    # Android carries no CA bundle at OpenSSL's compiled-in path, so urllib's
+    # HTTPS verification fails without this. flet pulls certifi in already;
+    # naming it here keeps that from being an accident.
+    "certifi",
 ]
 
 [tool.flet]

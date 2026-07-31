@@ -5,6 +5,7 @@ Async REST API Client for EcoPredict AI Backend using Python standard library.
 import asyncio
 import json
 import logging
+import ssl
 import urllib.request
 from typing import Dict, Any, Optional, List
 try:
@@ -14,25 +15,52 @@ except (ImportError, ModuleNotFoundError):
 
 logger = logging.getLogger(__name__)
 
+# Last transport-level failure, surfaced in Settings so a broken connection can
+# be diagnosed from the phone instead of guessing.
+last_http_error: str = ""
+
+
+def _build_ssl_context() -> ssl.SSLContext:
+    """
+    Android has no OpenSSL CA bundle at the path Python compiles in, so every
+    HTTPS request through urllib fails with CERTIFICATE_VERIFY_FAILED and the
+    app reports "no internet" on a perfectly good connection. certifi ships in
+    the APK (it comes along with flet), so point the context at its bundle.
+    """
+    try:
+        import certifi
+
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception as exc:  # desktop/dev, where the system store works
+        logger.info("certifi unavailable, using system trust store: %s", exc)
+        return ssl.create_default_context()
+
+
+_SSL_CONTEXT = _build_ssl_context()
+
 
 def _http_get_sync(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
     """Synchronous HTTP GET using urllib.request."""
+    global last_http_error
     try:
         req = urllib.request.Request(
             url,
             headers={"User-Agent": "EcoPredict-Mobile/1.0", "Accept": "application/json"}
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
             if resp.status == 200:
                 body = resp.read().decode("utf-8")
                 return json.loads(body)
+            last_http_error = f"HTTP {resp.status} from {url}"
     except Exception as e:
-        logger.warning(f"HTTP GET error for {url}: {e}")
+        last_http_error = f"{type(e).__name__}: {e}"
+        logger.warning("HTTP GET error for %s: %s", url, e)
     return None
 
 
 def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) -> Optional[Dict[str, Any]]:
     """Synchronous HTTP POST using urllib.request."""
+    global last_http_error
     try:
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -45,12 +73,14 @@ def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) ->
             },
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
             if resp.status == 200:
                 body = resp.read().decode("utf-8")
                 return json.loads(body)
+            last_http_error = f"HTTP {resp.status} from {url}"
     except Exception as e:
-        logger.warning(f"HTTP POST error for {url}: {e}")
+        last_http_error = f"{type(e).__name__}: {e}"
+        logger.warning("HTTP POST error for %s: %s", url, e)
     return None
 
 
@@ -111,11 +141,13 @@ class APIClient:
         # a green indicator over a dead API is worse than an honest error.
         state.is_api_online = False
         state.models_loaded = {"solar": False, "wind": False}
-        state.api_status_detail = (
-            "Backend reachable but incomplete: " + "; ".join(stub_hosts)
-            if stub_hosts
-            else "No backend responded. Check the API URL in Settings (HTTPS required on Android)."
-        )
+        if stub_hosts:
+            state.api_status_detail = "Backend reachable but incomplete: " + "; ".join(stub_hosts)
+        else:
+            state.api_status_detail = (
+                "No backend responded. Last error: "
+                f"{last_http_error or 'none recorded'}"
+            )
         logger.error("API health check failed: %s", state.api_status_detail)
         return {
             "status": "offline",
