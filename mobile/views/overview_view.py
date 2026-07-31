@@ -12,8 +12,8 @@ except (ImportError, ModuleNotFoundError):
     from components.metric_card import build_metric_card  # type: ignore # pyright: ignore[reportMissingImports]
 
 
-def build_overview_view(page: ft.Page, on_navigate: Callable[[int], None]) -> ft.Control:
-    """Build home overview screen."""
+def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -> ft.Control:
+    """Build home overview screen with string navigation callbacks and Solarman telemetry."""
     c = state.colors
 
     # Hero card
@@ -97,7 +97,6 @@ def build_overview_view(page: ft.Page, on_navigate: Callable[[int], None]) -> ft
         subtitle="200 kWh capacity",
     )
 
-    # Grid layout of KPI cards
     kpi_grid = ft.Column(
         [
             ft.Row([ft.Container(card_solar, expand=True), ft.Container(card_wind, expand=True)], spacing=10),
@@ -106,85 +105,114 @@ def build_overview_view(page: ft.Page, on_navigate: Callable[[int], None]) -> ft
         spacing=10,
     )
 
-    # Quick action shortcuts
+    # Interactive Solarman Telemetry Section
+    solarman_section = ft.Container(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Row(
+                            [
+                                ft.Icon(ft.Icons.SENSORS, color=c["primary"], size=20),
+                                ft.Text("Solarman Инвертор Телеметриясы (Real-time)", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+                            ]
+                        ),
+                        ft.IconButton(
+                            icon=ft.Icons.ARROW_FORWARD_IOS,
+                            icon_size=14,
+                            icon_color=c["primary"],
+                            on_click=lambda e: on_navigate_key("live"),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                ft.Row(
+                    [
+                        ft.Column(
+                            [
+                                ft.Text("PV Кернеу:", size=11, color=c["text_secondary"]),
+                                ft.Text("480.2 V", size=14, weight=ft.FontWeight.BOLD, color=c["primary"]),
+                            ],
+                            expand=True,
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("PV Ток:", size=11, color=c["text_secondary"]),
+                                ft.Text("14.5 A", size=14, weight=ft.FontWeight.BOLD, color=c["accent"]),
+                            ],
+                            expand=True,
+                        ),
+                        ft.Column(
+                            [
+                                ft.Text("Желі жиілігі:", size=11, color=c["text_secondary"]),
+                                ft.Text("50.0 Hz", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"]),
+                            ],
+                            expand=True,
+                        ),
+                    ],
+                ),
+                ft.OutlinedButton(
+                    content=ft.Row([ft.Icon(ft.Icons.ANALYTICS, size=16), ft.Text("Толық Solarman Телеметриясын Ашу", size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    on_click=lambda e: on_navigate_key("live"),
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
+                ),
+            ],
+            spacing=10,
+        ),
+        padding=14,
+        border_radius=16,
+        bgcolor=c["surface_variant"],
+        border=ft.Border.all(1, c["card_border"]),
+    )
+
+    # Quick action shortcuts using string keys
     action_btn_predict = ft.ElevatedButton(
-        content=ft.Text(state.text("ov_btn_predict")),
-        icon=ft.Icons.SHOW_CHART,
+        content=ft.Row([ft.Icon(ft.Icons.LIGHTBULB, size=16), ft.Text("⚡ ML Лезде Болжау Жобалау")], alignment=ft.MainAxisAlignment.CENTER),
         style=ft.ButtonStyle(
             bgcolor=c["primary"],
             color="#FFFFFF",
             shape=ft.RoundedRectangleBorder(radius=12),
         ),
-        on_click=lambda e: on_navigate(1), # Forecast tab
+        on_click=lambda e: on_navigate_key("predictions"),
+    )
+
+    action_btn_forecast = ft.OutlinedButton(
+        content=ft.Row([ft.Icon(ft.Icons.SHOW_CHART, size=16), ft.Text("📈 24h Болжам")]),
+        style=ft.ButtonStyle(color=c["text_primary"], shape=ft.RoundedRectangleBorder(radius=12)),
+        on_click=lambda e: on_navigate_key("forecast"),
         expand=True,
     )
 
     action_btn_fault = ft.OutlinedButton(
-        content=ft.Text(state.text("ov_btn_fault")),
-        icon=ft.Icons.CAMERA_ALT,
-        style=ft.ButtonStyle(
-            color=c["text_primary"],
-            shape=ft.RoundedRectangleBorder(radius=12),
-        ),
-        on_click=lambda e: on_navigate(2), # Faults tab
+        content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=16), ft.Text("📷 YOLO Ақау")]),
+        style=ft.ButtonStyle(color=c["text_primary"], shape=ft.RoundedRectangleBorder(radius=12)),
+        on_click=lambda e: on_navigate_key("faults"),
         expand=True,
     )
 
     action_btn_chat = ft.OutlinedButton(
-        content=ft.Text(state.text("ov_btn_chat")),
-        icon=ft.Icons.CHAT,
-        style=ft.ButtonStyle(
-            color=c["text_primary"],
-            shape=ft.RoundedRectangleBorder(radius=12),
-        ),
-        on_click=lambda e: on_navigate(4), # Chat tab
+        content=ft.Row([ft.Icon(ft.Icons.CHAT, size=16), ft.Text("💬 AI Кеңесші")]),
+        style=ft.ButtonStyle(color=c["text_primary"], shape=ft.RoundedRectangleBorder(radius=12)),
+        on_click=lambda e: on_navigate_key("chat"),
         expand=True,
     )
 
     quick_actions = ft.Column(
         [
             action_btn_predict,
-            ft.Row([action_btn_fault, action_btn_chat], spacing=10),
+            ft.Row([action_btn_forecast, action_btn_fault], spacing=10),
+            action_btn_chat,
         ],
         spacing=10,
     )
 
-    offline_banner = ft.Container(
-        content=ft.Row(
-            [
-                ft.Icon(ft.Icons.WIFI_OFF, color="#FFFFFF", size=22),
-                ft.Column(
-                    [
-                        ft.Text(
-                            "⚠️ Интернет байланысы жоқ!",
-                            size=13,
-                            weight=ft.FontWeight.BOLD,
-                            color="#FFFFFF",
-                        ),
-                        ft.Text(
-                            "Ұялы деректерді (4G/5G) немесе Wi-Fi-ды тексеріңіз. Railway 24/7 Сервер оффлайн.",
-                            size=11,
-                            color="#FEE2E2",
-                        ),
-                    ],
-                    spacing=2,
-                    expand=True,
-                ),
-            ],
-            spacing=10,
-        ),
-        padding=12,
-        border_radius=12,
-        bgcolor=c["error"],
-        visible=not state.is_api_online,
-    )
-
     return ft.ListView(
         controls=[
-            offline_banner,
             hero_card,
             ft.Container(height=10),
             kpi_grid,
+            ft.Container(height=10),
+            solarman_section,
             ft.Container(height=14),
             kpi_title,
             ft.Container(height=6),

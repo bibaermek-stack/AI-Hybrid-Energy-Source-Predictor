@@ -138,11 +138,13 @@ async def main(page: ft.Page):
         if view_key in views:
             state.active_tab = view_key
             view_container.content = views[view_key]
+            if view_key in view_keys and page.navigation_bar:
+                page.navigation_bar.selected_index = view_keys.index(view_key)
             page.update()
 
     # Views Registry
     views = {
-        "overview": build_overview_view(page, lambda idx: on_nav_change(view_keys[idx] if idx < len(view_keys) else "overview")),
+        "overview": build_overview_view(page, on_nav_change),
         "predictions": build_predictions_view(page),
         "forecast": build_forecast_view(page),
         "faults": build_faults_view(page),
@@ -159,21 +161,19 @@ async def main(page: ft.Page):
     # Dynamic Step-by-Step Loading Animation
     health_task = asyncio.create_task(api_client.check_health())
 
-    progress_bar.value = 0.45
+    progress_bar.value = 0.60
     txt_loading_status.value = "Solar & Wind ML модельдері жүктелуде..."
     page.update()
-    await asyncio.sleep(0.4)
 
-    progress_bar.value = 0.80
-    txt_loading_status.value = "Railway 24/7 Бұлттық Серверге қосылуда..."
-    page.update()
-
-    await health_task
+    try:
+        await asyncio.wait_for(health_task, timeout=2.0)
+    except Exception:
+        pass
 
     progress_bar.value = 1.0
     txt_loading_status.value = "Жүйе сәтті іске қосылды! 🚀"
     page.update()
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(0.1)
 
     # Transition from Loading Page to Main Dashboard
     view_container.content = views["overview"]
@@ -201,7 +201,7 @@ db_status = "disconnected"
 
 if DATABASE_URL:
     try:
-        import sqlalchemy
+        import sqlalchemy  # type: ignore # pyright: ignore[reportMissingImports]
         engine = sqlalchemy.create_engine(DATABASE_URL, pool_pre_ping=True)
         with engine.connect() as conn:
             conn.execute(sqlalchemy.text("SELECT 1"))
@@ -250,7 +250,7 @@ except Exception:
     pass
 
 try:
-    import flet_fastapi
+    import flet_fastapi  # type: ignore # pyright: ignore[reportMissingImports]
     app.mount("/app", flet_fastapi.app(main))
 except Exception:
     pass

@@ -79,3 +79,12 @@ _research/
 # Build artifacts & APK
 build/
 *.apk
+
+# ============================================================
+# Nested mirror of this project (separate repo: EcoPradict-Ai).
+# Was committed as a gitlink with no .gitmodules entry, which made
+# fresh clones produce an empty, uninitializable directory.
+# Kept on disk (holds .venv) but no longer tracked here.
+# ============================================================
+EcoPredict AI/
+sync_root.py
