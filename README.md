@@ -156,7 +156,6 @@ Abstract draft: [`docs/GCAITMD25_EcoPredict_Abstract.md`](docs/GCAITMD25_EcoPred
 ## Installation
 
 ```bash
-cd "EcoPredict AI"
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
@@ -169,6 +168,10 @@ pip install -r requirements.txt
 API_URL=http://127.0.0.1:8001/predict
 HEALTH_URL=http://127.0.0.1:8001/health
 MODEL_PATH=artifacts
+
+# Guards the credential routes (/solarman/configure, /solarman/status).
+# Unset = those two routes stay disabled (503). Everything else is unaffected.
+ECOPREDICT_API_KEY=<long-random-string>
 ```
 
 ---
@@ -204,6 +207,17 @@ python -m unittest discover -s tests -v
 | POST | `/explain`, `/chat` | EN/KK advisor |
 | POST | `/solarman/*` | Process, ROI, alert, … |
 | GET | `/solarman/weather` | Turkistan weather |
+| POST | `/solarman/configure` | 🔒 Set OpenAPI credentials — needs `X-API-Key` |
+| GET | `/solarman/status` | 🔒 Credential status — needs `X-API-Key` |
+
+🔒 = requires the `X-API-Key` header matching `ECOPREDICT_API_KEY`. These two routes
+read/write the Solarman credentials the whole process authenticates with, and the API
+is reachable from the public internet through the Railway TCP proxy, so they are
+fail-closed: with no key configured they return `503` instead of accepting anyone.
+
+```bash
+curl -X POST http://127.0.0.1:8001/solarman/configure -H "X-API-Key: $ECOPREDICT_API_KEY" -H 'Content-Type: application/json' -d '{"app_id":"...","app_secret":"...","email":"...","password":"..."}'
+```
 
 OpenAPI: http://127.0.0.1:8001/docs
 
@@ -212,7 +226,7 @@ OpenAPI: http://127.0.0.1:8001/docs
 ## Project layout
 
 ```
-EcoPredict AI/
+.
 ├── api/
 ├── dashboard/app.py + views/ + static/
 ├── src/education/ labs · lab_tasks · progress

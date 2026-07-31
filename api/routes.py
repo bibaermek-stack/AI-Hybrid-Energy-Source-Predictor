@@ -14,6 +14,7 @@ from api.schemas import (
     SolarmanProcessRequest, SolarmanProcessResponse, SolarmanRoiRequest, SolarmanRoiResponse,
     SolarmanAlertRequest, SolarmanAlertResponse
 )
+from api.security import require_api_key
 from src.monitoring.model_monitor import PredictionLogger
 from src.llm_agent.energy_advisor import explain_energy, chat_advisor
 from src.utils.solarman_processor import SolarmanProcessor
@@ -390,11 +391,14 @@ class SolarmanCredsRequest(BaseModel):
     test_auth: bool = Field(True, description="Try token request after saving")
 
 
-@router.post("/solarman/configure")
+@router.post("/solarman/configure", dependencies=[Depends(require_api_key)])
 def solarman_configure(req: SolarmanCredsRequest):
     """
     Register Solarman OpenAPI credentials for this API process, then optionally
     validate with a real token request.
+
+    Requires the `X-API-Key` header (see ECOPREDICT_API_KEY) — this route rewrites
+    the credentials every other Solarman endpoint authenticates with.
     """
     status = set_runtime_credentials(
         app_id=req.app_id,
@@ -503,9 +507,14 @@ def solarman_history(days: int = 1, demo: bool = False):
         raise HTTPException(status_code=502, detail=str(e))
 
 
-@router.get("/solarman/status")
+@router.get("/solarman/status", dependencies=[Depends(require_api_key)])
 def solarman_credentials_status():
-    """Whether Solarman OpenAPI credentials are present."""
+    """
+    Whether Solarman OpenAPI credentials are present.
+
+    Guarded: the response discloses the configured device SN / ID and which
+    credential fields are set.
+    """
     return credentials_status()
 
 

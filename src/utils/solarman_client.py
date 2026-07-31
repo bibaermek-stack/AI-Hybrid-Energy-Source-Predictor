@@ -43,31 +43,31 @@ def set_runtime_credentials(
     base_url: str = "",
     password_is_sha256: bool = False,
 ) -> dict:
-    """Store OpenAPI credentials in process memory (and optionally mirror to env)."""
+    """
+    Store OpenAPI credentials in process memory.
+
+    Deliberately does *not* mirror into os.environ: that mutated global state for the
+    whole process and leaked the password into the environment of anything spawned
+    afterwards. SolarmanClient reads _RUNTIME_CREDS first, so the override still wins
+    over .env.
+    """
     global _RUNTIME_CREDS
     if app_id:
         _RUNTIME_CREDS["SOLARMAN_APP_ID"] = app_id.strip()
-        os.environ["SOLARMAN_APP_ID"] = app_id.strip()
     if app_secret:
         _RUNTIME_CREDS["SOLARMAN_APP_SECRET"] = app_secret.strip()
-        os.environ["SOLARMAN_APP_SECRET"] = app_secret.strip()
     if email:
         _RUNTIME_CREDS["SOLARMAN_EMAIL"] = email.strip()
-        os.environ["SOLARMAN_EMAIL"] = email.strip()
     if password:
         _RUNTIME_CREDS["SOLARMAN_PASSWORD"] = password.strip()
-        os.environ["SOLARMAN_PASSWORD"] = password.strip()
     if device_sn:
         _RUNTIME_CREDS["SOLARMAN_DEVICE_SN"] = device_sn.strip()
-        os.environ["SOLARMAN_DEVICE_SN"] = device_sn.strip()
     if device_id:
         _RUNTIME_CREDS["SOLARMAN_DEVICE_ID"] = str(device_id).strip()
-        os.environ["SOLARMAN_DEVICE_ID"] = str(device_id).strip()
     if base_url:
         _RUNTIME_CREDS["SOLARMAN_BASE_URL"] = base_url.strip().rstrip("/")
-        os.environ["SOLARMAN_BASE_URL"] = base_url.strip().rstrip("/")
     if password_is_sha256:
-        os.environ["SOLARMAN_PASSWORD_SHA256"] = "1"
+        _RUNTIME_CREDS["SOLARMAN_PASSWORD_SHA256"] = "1"
     return credentials_status()
 
 
@@ -127,7 +127,10 @@ class SolarmanClient:
 
     def _password_hash(self) -> str:
         """Solarman expects SHA-256 hex of the plain password (unless already hashed)."""
-        if os.getenv("SOLARMAN_PASSWORD_SHA256", "").lower() in ("1", "true", "yes"):
+        flag = _RUNTIME_CREDS.get("SOLARMAN_PASSWORD_SHA256") or os.getenv(
+            "SOLARMAN_PASSWORD_SHA256", ""
+        )
+        if flag.lower() in ("1", "true", "yes"):
             return self.password
         # If looks like sha256 hex already
         if len(self.password) == 64 and all(c in "0123456789abcdef" for c in self.password.lower()):

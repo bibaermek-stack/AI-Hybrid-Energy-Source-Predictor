@@ -1,6 +1,101 @@
+import os
 import unittest
+from unittest import mock
+
 from fastapi.testclient import TestClient
 from api.main import app
+from api.security import API_KEY_ENV
+from src.utils import solarman_client
+
+
+CREDS_PAYLOAD = {
+    "app_id": "test-app-id",
+    "app_secret": "test-app-secret",
+    "email": "tester@example.com",
+    "password": "hunter2",
+    "test_auth": False,
+}
+
+
+class TestCredentialEndpointsAreGuarded(unittest.TestCase):
+    """POST /solarman/configure rewrites the credentials every other Solarman
+    route authenticates with, so it must never be anonymous."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.client = TestClient(app)
+
+    def tearDown(self):
+        # /solarman/configure mutates module-level state shared with every other
+        # test module; restore it so test order stays irrelevant.
+        solarman_client._RUNTIME_CREDS.clear()
+        solarman_client._RUNTIME_CREDS.update(self._saved_creds)
+
+    def setUp(self):
+        self._saved_creds = dict(solarman_client._RUNTIME_CREDS)
+
+    def test_configure_disabled_when_no_key_configured(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(API_KEY_ENV, None)
+            resp = self.client.post("/solarman/configure", json=CREDS_PAYLOAD)
+        self.assertEqual(resp.status_code, 503)
+
+    def test_configure_rejects_missing_key(self):
+        with mock.patch.dict(os.environ, {API_KEY_ENV: "s3cret"}):
+            resp = self.client.post("/solarman/configure", json=CREDS_PAYLOAD)
+        self.assertEqual(resp.status_code, 401)
+
+    def test_configure_rejects_wrong_key(self):
+        with mock.patch.dict(os.environ, {API_KEY_ENV: "s3cret"}):
+            resp = self.client.post(
+                "/solarman/configure",
+                json=CREDS_PAYLOAD,
+                headers={"X-API-Key": "not-the-key"},
+            )
+        self.assertEqual(resp.status_code, 401)
+
+    def test_configure_accepts_correct_key(self):
+        with mock.patch.dict(os.environ, {API_KEY_ENV: "s3cret"}):
+            resp = self.client.post(
+                "/solarman/configure",
+                json=CREDS_PAYLOAD,
+                headers={"X-API-Key": "s3cret"},
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.json()["credentials_configured"])
+
+    def test_status_requires_key(self):
+        with mock.patch.dict(os.environ, {API_KEY_ENV: "s3cret"}):
+            self.assertEqual(self.client.get("/solarman/status").status_code, 401)
+            ok = self.client.get("/solarman/status", headers={"X-API-Key": "s3cret"})
+        self.assertEqual(ok.status_code, 200)
+
+    def test_credentials_are_not_written_to_process_environ(self):
+        """Runtime creds used to be mirrored into os.environ, leaking the password
+        into the environment of every subprocess spawned afterwards.
+
+        .env may already populate these names, so assert the *submitted* values
+        never reach the environment rather than that the names are absent.
+        """
+        canary_pw = "leak-canary-password"
+        canary_secret = "leak-canary-secret"
+        with mock.patch.dict(os.environ, {API_KEY_ENV: "s3cret"}):
+            resp = self.client.post(
+                "/solarman/configure",
+                json={
+                    **CREDS_PAYLOAD,
+                    "password": canary_pw,
+                    "app_secret": canary_secret,
+                },
+                headers={"X-API-Key": "s3cret"},
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertNotEqual(os.environ.get("SOLARMAN_PASSWORD"), canary_pw)
+            self.assertNotEqual(os.environ.get("SOLARMAN_APP_SECRET"), canary_secret)
+
+        # ...but the client must still pick them up from the runtime store.
+        self.assertEqual(solarman_client.SolarmanClient().password, canary_pw)
+
 
 class TestSolarmanAPI(unittest.TestCase):
     @classmethod
