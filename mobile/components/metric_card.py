@@ -69,7 +69,12 @@ def build_metric_card(
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.START,
-                    vertical_alignment=ft.CrossAxisAlignment.BASELINE,
+                    # Not BASELINE: Flutter asserts textBaseline != null for that
+                    # alignment, and flet's Row exposes no way to set it — the
+                    # assertion killed the render, blanking every screen that
+                    # uses this card (home and Solarman). END gives the same
+                    # look for a large value next to a small unit.
+                    vertical_alignment=ft.CrossAxisAlignment.END,
                     spacing=4,
                 ),
                 ft.Text(

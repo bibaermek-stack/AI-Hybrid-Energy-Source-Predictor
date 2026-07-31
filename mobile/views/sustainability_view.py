@@ -67,7 +67,7 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
                 content=ft.Column(
                     [
                         ft.Text("💚 Жасыл Энергия Үлесі (Green Ratio):", size=13, weight=ft.FontWeight.BOLD),
-                        ft.ProgressBar(value=0.88, color=c["success"], bgcolor="rgba(255,255,255,0.1)", height=12),
+                        ft.ProgressBar(value=0.88, color=c["success"], bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.WHITE), height=12),
                         ft.Row([ft.Text("Микрожелі Жасыл Энергиясы: 88.4%"), ft.Text("Максимум", color=c["success"])], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                     ],
                     spacing=6,
