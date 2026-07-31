@@ -109,7 +109,10 @@ def build_faults_view(page: ft.Page) -> ft.Control:
         page.update()
 
     file_picker = ft.FilePicker()
-    page.overlay.append(file_picker)
+    # FilePicker subclasses Service, not Control, in flet 0.86. Putting it in
+    # page.overlay made Flutter render a full-height red "Unknown control:
+    # FilePicker" banner over every screen.
+    page.services.append(file_picker)
 
     async def on_upload_click(e) -> None:
         # flet 0.86: pick_files is awaitable and returns the files directly;
