@@ -18,8 +18,16 @@ def build_metric_card(
     icon: Any = ft.Icons.BOLT,
     accent_color: str = "#3B82F6",
     subtitle: str = "",
+    value_ref: Any = None,
+    subtitle_ref: Any = None,
 ) -> ft.Container:
-    """Build a metric card control."""
+    """
+    Build a metric card control.
+
+    Pass value_ref / subtitle_ref (ft.Ref[ft.Text]) to keep a handle on the
+    text controls, so a caller can refresh the figures in place once live data
+    arrives instead of rebuilding the whole card.
+    """
     c = state.colors
 
     return ft.Container(
@@ -51,6 +59,7 @@ def build_metric_card(
                             size=22,
                             weight=ft.FontWeight.BOLD,
                             color=c["text_primary"],
+                            ref=value_ref,
                         ),
                         ft.Text(
                             unit,
@@ -68,7 +77,8 @@ def build_metric_card(
                     size=10,
                     color=c["text_secondary"],
                     visible=bool(subtitle),
-                ) if subtitle else ft.Container(),
+                    ref=subtitle_ref,
+                ) if (subtitle or subtitle_ref) else ft.Container(),
             ],
             spacing=8,
         ),

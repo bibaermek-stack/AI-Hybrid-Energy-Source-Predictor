@@ -60,13 +60,33 @@ def build_live_view(page: ft.Page) -> ft.Control:
         page.update()
 
         data = await api_client.get_solarman_live()
-        p_val = float(data.get('inverter_power_kw', 845.2 if selected_sn == "2501221272" else 620.1))
-        d_val = float(data.get('daily_yield_kwh', 3420.5 if selected_sn == "2501221272" else 2810.0)) / 1000.0
+        # The dashboard nests its figures under generation/basic. Reading
+        # inverter_power_kw / daily_yield_kwh / ambient_temp_c off the top level
+        # always missed, so this screen quietly rendered its fallback constants
+        # (845.2 kW, 3.42 MWh) as if they were live telemetry.
+        gen = data.get("generation") or {}
+        basic = data.get("basic") or {}
 
-        txt_power.value = f"{p_val:.1f} kW"
-        txt_daily.value = f"{d_val:.2f} MWh"
-        txt_status.value = data.get("status", "🟢 Normal Operation / Нормалды")
-        txt_weather.value = f"Ambient {data.get('ambient_temp_c', 28.5)}°C · Irradiance 910 W/m²"
+        if gen:
+            p_val = float(gen.get("ac_active_power_kw") or 0.0)
+            d_val = float(gen.get("e_today_kwh") or 0.0) / 1000.0
+            temp_c = gen.get("temperature_c")
+            online = basic.get("status") == 1
+            txt_power.value = f"{p_val:.1f} kW"
+            txt_daily.value = f"{d_val:.2f} MWh"
+            txt_status.value = (
+                "🟢 Normal Operation / Нормалды" if online else "🔴 Offline / Байланыс жоқ"
+            )
+            txt_weather.value = (
+                f"Inverter {temp_c}°C · {data.get('source', 'api')}"
+                if temp_c is not None
+                else f"Source: {data.get('source', 'api')}"
+            )
+        else:
+            txt_power.value = "—"
+            txt_daily.value = "—"
+            txt_status.value = "⚠️ Деректер қолжетімсіз"
+            txt_weather.value = state.api_status_detail or "Serverден жауап жоқ"
 
         progress_ring.visible = False
         page.update()
