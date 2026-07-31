@@ -22,18 +22,23 @@ def build_live_view(page: ft.Page) -> ft.Control:
     # Inverter selection
     selected_sn = "2501221272"
 
-    # Telemetry text controls
-    txt_power = ft.Text("845.2 kW", size=22, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_daily = ft.Text("3.42 MWh", size=22, weight=ft.FontWeight.BOLD, color=c["accent"])
-    txt_pv_v = ft.Text("480.2 V DC", size=14, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_pv_i = ft.Text("14.5 A DC", size=14, weight=ft.FontWeight.BOLD, color=c["accent"])
-    txt_grid_v = ft.Text("230.1 V AC", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"])
-    txt_grid_freq = ft.Text("50.01 Hz", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"])
-    txt_mppt_eff = ft.Text("98.4%", size=14, weight=ft.FontWeight.BOLD, color=c["success"])
-    txt_inv_temp = ft.Text("38.5 °C", size=14, weight=ft.FontWeight.BOLD, color="#EC4899")
+    # Telemetry text controls. All start blank: these used to carry plausible
+    # constants (845.2 kW, 480.2 V DC, 98.4% …) that on_refresh never touched,
+    # so most of this screen showed invented readings forever.
+    # Power and daily yield live in the KPI cards below, reached through refs;
+    # the standalone txt_power / txt_daily controls that used to be here were
+    # never added to the tree, so writing to them updated nothing on screen.
+    txt_pv_v = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["primary"])
+    txt_pv_i = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["accent"])
+    txt_grid_v = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"])
+    txt_grid_freq = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"])
+    txt_mppt_eff = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["success"])
+    txt_inv_temp = ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color="#EC4899")
 
-    txt_status = ft.Text("🟢 Normal Operation / Нормалды", size=14, weight=ft.FontWeight.BOLD, color=c["success"])
-    txt_weather = ft.Text("Clear Sky 28.5°C · Irradiance 910 W/m²", size=12, color=c["text_secondary"])
+    ref_kpi_power, ref_kpi_daily = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+
+    txt_status = ft.Text("Жүктелуде…", size=14, weight=ft.FontWeight.BOLD, color=c["text_secondary"])
+    txt_weather = ft.Text("", size=12, color=c["text_secondary"])
     progress_ring = ft.ProgressRing(visible=False, width=16, height=16, stroke_width=2, color=c["primary"])
 
     # ROI Economic Calculator Controls
@@ -59,7 +64,7 @@ def build_live_view(page: ft.Page) -> ft.Control:
         progress_ring.visible = True
         page.update()
 
-        data = await api_client.get_solarman_live()
+        data = await api_client.get_solarman_live(selected_sn)
         # The dashboard nests its figures under generation/basic. Reading
         # inverter_power_kw / daily_yield_kwh / ambient_temp_c off the top level
         # always missed, so this screen quietly rendered its fallback constants
@@ -67,26 +72,46 @@ def build_live_view(page: ft.Page) -> ft.Control:
         gen = data.get("generation") or {}
         basic = data.get("basic") or {}
 
+        def _set_ref(ref, value):
+            if ref.current is not None:
+                ref.current.value = value
+
         if gen:
+            dc = (gen.get("dc") or [{}])[0]
+            ac = (gen.get("ac") or [{}])[0]
             p_val = float(gen.get("ac_active_power_kw") or 0.0)
             d_val = float(gen.get("e_today_kwh") or 0.0) / 1000.0
+            dc_total = float(gen.get("dc_total_kw") or 0.0)
             temp_c = gen.get("temperature_c")
-            online = basic.get("status") == 1
-            txt_power.value = f"{p_val:.1f} kW"
-            txt_daily.value = f"{d_val:.2f} MWh"
+
+            _set_ref(ref_kpi_power, f"{p_val:.1f}")
+            _set_ref(ref_kpi_daily, f"{d_val:.2f}")
+
+            txt_pv_v.value = f"{dc.get('voltage_v', 0)} V DC"
+            txt_pv_i.value = f"{dc.get('current_a', 0)} A DC"
+            txt_grid_v.value = f"{ac.get('voltage_v', 0)} V AC"
+            txt_grid_freq.value = f"{ac.get('frequency_hz', 0)} Hz"
+            # DC->AC conversion efficiency; the API reports no MPPT figure, so
+            # this is derived rather than the invented 98.4% that sat here.
+            txt_mppt_eff.value = f"{(p_val / dc_total * 100):.1f}%" if dc_total else "—"
+            txt_inv_temp.value = f"{temp_c} °C" if temp_c is not None else "—"
+
             txt_status.value = (
-                "🟢 Normal Operation / Нормалды" if online else "🔴 Offline / Байланыс жоқ"
+                "🟢 Normal Operation / Нормалды"
+                if basic.get("status") == 1
+                else "🔴 Offline / Байланыс жоқ"
             )
-            txt_weather.value = (
-                f"Inverter {temp_c}°C · {data.get('source', 'api')}"
-                if temp_c is not None
-                else f"Source: {data.get('source', 'api')}"
-            )
+            txt_status.color = c["success"] if basic.get("status") == 1 else c["error"]
+            txt_weather.value = f"SN {basic.get('sn', selected_sn)} · дереккөз: {data.get('source', 'api')}"
         else:
-            txt_power.value = "—"
-            txt_daily.value = "—"
+            for t in (txt_pv_v, txt_pv_i, txt_grid_v,
+                      txt_grid_freq, txt_mppt_eff, txt_inv_temp):
+                t.value = "—"
+            _set_ref(ref_kpi_power, "—")
+            _set_ref(ref_kpi_daily, "—")
             txt_status.value = "⚠️ Деректер қолжетімсіз"
-            txt_weather.value = state.api_status_detail or "Serverден жауап жоқ"
+            txt_status.color = c["error"]
+            txt_weather.value = state.api_status_detail or "Серверден жауап жоқ"
 
         progress_ring.visible = False
         page.update()
@@ -95,22 +120,17 @@ def build_live_view(page: ft.Page) -> ft.Control:
     def on_inverter_change(e):
         nonlocal selected_sn
         selected_sn = dd_inverters.value or "2501221272"
-        if selected_sn == "2501221272":
-            txt_power.value = "845.2 kW"
-            txt_daily.value = "3.42 MWh"
-            txt_pv_v.value = "480.2 V DC"
-            txt_pv_i.value = "14.5 A DC"
-        else:
-            txt_power.value = "620.1 kW"
-            txt_daily.value = "2.81 MWh"
-            txt_pv_v.value = "415.8 V DC"
-            txt_pv_i.value = "12.1 A DC"
-        page.update()
+        # Used to write a second set of constants per SN. /solarman/live takes
+        # a device_sn, so ask the backend for that inverter instead.
+        page.run_task(on_refresh)
 
     dd_inverters = ft.Dropdown(
         options=[
-            ft.dropdown.Option("2501221272", "Инвертор #1 (SN: 2501221272) — 1000 kW"),
-            ft.dropdown.Option("2411046235", "Инвертор #2 (SN: 2411046235) — 750 kW"),
+            # No capacity in the label: these read "1000 kW" and "750 kW" while
+            # the plant reports 25 kW rated. Actual rating arrives in the
+            # response as basic.rated_power_kw.
+            ft.dropdown.Option("2501221272", "Инвертор #1 — SN 2501221272"),
+            ft.dropdown.Option("2411046235", "Инвертор #2 — SN 2411046235"),
         ],
         value="2501221272",
         on_select=on_inverter_change,
@@ -150,11 +170,11 @@ def build_live_view(page: ft.Page) -> ft.Control:
     kpi_grid = ft.Row(
         [
             ft.Container(
-                build_metric_card(title=state.text("live_power"), value="845.2", unit="kW", icon=ft.Icons.POWER, accent_color=c["primary"]),
+                build_metric_card(title=state.text("live_power"), value="—", unit="kW", icon=ft.Icons.POWER, accent_color=c["primary"], value_ref=ref_kpi_power),
                 expand=True,
             ),
             ft.Container(
-                build_metric_card(title=state.text("live_daily"), value="3.42", unit="MWh", icon=ft.Icons.WB_SUNNY, accent_color=c["accent"]),
+                build_metric_card(title=state.text("live_daily"), value="—", unit="MWh", icon=ft.Icons.WB_SUNNY, accent_color=c["accent"], value_ref=ref_kpi_daily),
                 expand=True,
             ),
         ],
@@ -219,7 +239,11 @@ def build_live_view(page: ft.Page) -> ft.Control:
         border=ft.Border.all(1, c["card_border"]),
     )
 
-    return ft.ListView(
+    # Load once on build and again on every visit — the screen previously
+    # waited for a manual "Жаңарту" tap and otherwise sat on its constants.
+    page.run_task(on_refresh)
+
+    view = ft.ListView(
         controls=[
             ft.Row(
                 [
@@ -243,3 +267,5 @@ def build_live_view(page: ft.Page) -> ft.Control:
         spacing=12,
         padding=12,
     )
+    view.data = on_refresh
+    return view
