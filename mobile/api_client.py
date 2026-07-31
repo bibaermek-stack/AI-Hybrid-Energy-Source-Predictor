@@ -240,11 +240,13 @@ class APIClient:
             "Бірақ жергілікті режимде барлық есептеулер жұмыс істейді!"
         )
 
-    async def get_solarman_live(self) -> Dict[str, Any]:
-        """Fetch Solarman live plant telemetry."""
+    async def get_solarman_live(self, device_sn: str = "") -> Dict[str, Any]:
+        """Fetch Solarman live plant telemetry for a specific inverter SN."""
         # /solarman/live is a GET; POSTing to it returned 405 every time, which
         # is why the live telemetry screen never populated.
         url = f"{state.api_base_url}/solarman/live?demo=true"
+        if device_sn:
+            url += f"&device_sn={device_sn}"
         res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
         if res and isinstance(res, dict):
             return res
