@@ -1,0 +1,44 @@
+name: Build iOS App (.ipa)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["*"]
+
+jobs:
+  build-ios:
+    name: Build iOS App (.ipa)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.x'
+          channel: 'stable'
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies & Flet CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install flet
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build iOS IPA Package
+        run: |
+          flet build ipa --no-codesign --project-name ecopredict-ai-mobile
+
+      - name: Upload .ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EcoPredict-AI-iOS-IPA
+          path: |
+            build/ipa/*.ipa
+            build/ios/archive/*.xcarchive

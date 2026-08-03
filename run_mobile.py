@@ -20,8 +20,9 @@ from mobile.main import main
 if __name__ == "__main__":
     is_web = "--web" in sys.argv
     if is_web:
-        print("Launching EcoPredict AI Mobile in Web Browser Mode...", flush=True)
+        print("Launching EcoPredict AI Mobile in Web Browser Mode (iPhone 16 Inspector)...", flush=True)
+        print("Open http://localhost:8550 in Chrome/Edge, press F12 and select 'iPhone 14/15/16 Pro' device.", flush=True)
         ft.run(main, view=ft.AppView.WEB_BROWSER, port=8550)
     else:
-        print("Launching EcoPredict AI Mobile in Desktop Preview Window...", flush=True)
+        print("Launching EcoPredict AI Mobile in Desktop Preview Window (iPhone 16 Frame: 393x852)...", flush=True)
         ft.run(main)
