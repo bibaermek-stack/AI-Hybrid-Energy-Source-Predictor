@@ -54,9 +54,18 @@ except (ImportError, ModuleNotFoundError):
 
 async def main(page: ft.Page):
     """Main Flet mobile application entry point with Splash Screen."""
-    page.title = "EcoPredict AI Mobile"
+    page.title = "EcoPredict AI Mobile - iPhone 16 Simulation"
     page.padding = 0
     page.spacing = 0
+
+    # iPhone 16 Display Frame Simulation (393 x 852 px)
+    try:
+        page.window.width = 393
+        page.window.height = 852
+        page.window.min_width = 360
+        page.window.min_height = 700
+    except Exception:
+        pass
 
     # Dynamic theme mode
     page.theme_mode = ft.ThemeMode.DARK if state.dark_mode else ft.ThemeMode.LIGHT
@@ -147,7 +156,11 @@ async def main(page: ft.Page):
             # by leaving an async reload callable in .data.
             reload_fn = getattr(target, "data", None)
             if callable(reload_fn):
-                page.run_task(reload_fn)
+                async def _run_task_wrapper():
+                    res = reload_fn()
+                    if asyncio.iscoroutine(res):
+                        await res
+                page.run_task(_run_task_wrapper)
 
     # Views Registry
     views = {
@@ -195,7 +208,11 @@ async def main(page: ft.Page):
     # Only now that the dashboard is mounted is it safe to fetch live figures.
     overview_reload = getattr(views["overview"], "data", None)
     if callable(overview_reload):
-        page.run_task(overview_reload)
+        async def _run_overview_reload():
+            res = overview_reload()
+            if asyncio.iscoroutine(res):
+                await res
+        page.run_task(_run_overview_reload)
 
 
 if __name__ == "__main__":
@@ -219,9 +236,12 @@ import os
 
 logger = logging.getLogger("mobile-backend")
 
+FastAPI = None  # type: ignore
+CORSMiddleware = None  # type: ignore
+
 try:
-    from fastapi import FastAPI
-    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi import FastAPI  # type: ignore
+    from fastapi.middleware.cors import CORSMiddleware  # type: ignore
 
     _FASTAPI_AVAILABLE = True
 except ImportError:  # running inside the APK — no server, nothing to do
@@ -229,7 +249,7 @@ except ImportError:  # running inside the APK — no server, nothing to do
 
 app = None
 
-if _FASTAPI_AVAILABLE:
+if _FASTAPI_AVAILABLE and FastAPI is not None and CORSMiddleware is not None:
     DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
     db_status = "disconnected"
 
