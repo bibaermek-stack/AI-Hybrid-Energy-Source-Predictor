@@ -49,13 +49,14 @@ git push origin main
 |---|---|
 | **Settings → Source → Root Directory** | бос (репозиторий түбірі). `mobile` тұрса — тек `/health` жұмыс істейді, қалғаны 404 |
 | **Settings → Deploy → Custom Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
-| **Variables** | `WEATHERAPI_KEY`, `ECOPREDICT_API_KEY`, Solarman кілттері |
+| **Variables** | `WEATHERAPI_KEY`, `ECOPREDICT_API_KEY`, `SOLARMAN_APP_ID`, `SOLARMAN_APP_SECRET`, `SOLARMAN_EMAIL`, `SOLARMAN_PASSWORD` (қалауы бойынша `SOLARMAN_DEVICE_SN`) |
 
 > Түбірдегі `Procfile` (`python run_app.py`) жария портта Streamlit-ті іске қосады, API-ды емес —
 > сондықтан мобильді сервис үшін Start Command-ты міндетті түрде жоғарыдағыдай көрсетіңіз.
 
 **Тексеру:** браузерде `https://ecopradict-mobile-production.up.railway.app/health` ашыңыз.
 Жауапта `"api": "full"` (немесе `"forecast_backend"`) болуы тиіс. `"api": "stub"` — Root Directory әлі `mobile`.
+Бұл тексеріс автоматты түрде де жүреді: `.github/workflows/backend-health.yml` (әр 6 сағат сайын; Actions → Backend health → Run workflow).
 
 Репозиторий **private** болса, Railway-дің GitHub қосымшасына осы репоға қолжетімділік беріңіз
 (GitHub → Settings → Applications → Railway → Repository access), әйтпесе жаңа деплой басталмайды.

@@ -20,8 +20,16 @@
 - README-дегі build командалары түзетілді.
 - **GitHub Actions-та тексерілді:** Android APK ✅ (run 36118256887, ~63 MB), iOS Simulator build ✅ (run 36118259702, ~86 MB). Бірінші iOS әрекеті Xcode 16.4 SDK-да `isiOSAppOnVision` жоқ болғандықтан құлады — workflow енді ең жаңа тұрақты Xcode-ты таңдайды. Artifact-тар 14 күн сақталады.
 
+**Railway (Pro) — тексерілді 2026-09-25, `backend-health.yml` арқылы:**
+`https://ecopradict-mobile-production.up.railway.app/health` → `status: healthy`, `api: full`, solar/wind модельдері жүктелген,
+жауап 0.2 с. Яғни сервис репо түбірінен дұрыс деплой болған — қосымша жұмыс істейтін backend-ке қосылады.
+
 **Қалғаны сізден (кодпен жасалмайды):**
-1. Railway: `ecopradict-mobile` сервисінде Root Directory-ді тазалау, Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`, айнымалыларды қою; `/health`-те `"api": "stub"` емес екенін тексеру. **Осыны жасамай бұл тармақты merge етсеңіз, қосымша backend таппайды** — бұрын ол басқа репоның сервисіне үнсіз ауысып жүрген.
+1. Railway → `ecopradict-mobile` сервисі → **Variables**-ке қосу (қазір жоқ, тексеріс ескерту берді):
+   - `WEATHERAPI_KEY` — жоқ болса 24h болжам экраны бос (`/solarman/forecast` → 500).
+   - `SOLARMAN_APP_ID`, `SOLARMAN_APP_SECRET`, `SOLARMAN_EMAIL`, `SOLARMAN_PASSWORD` (қажет болса `SOLARMAN_DEVICE_SN`) —
+     жоқ болса Solarman экраны нақты инвертордың орнына **демо** деректерді көрсетеді (`/solarman/live?demo=false` → 502).
+   Бұл мәндер бұрын жұмыс істеген `ecopradict-ai` сервисінде (EcoPradict-Ai репо) бар болуы мүмкін — сол жерден көшіруге болады.
 2. GitHub-та репозиторийді private ету; кейін Railway GitHub App-қа осы репоға рұқсат беру.
 
 ---

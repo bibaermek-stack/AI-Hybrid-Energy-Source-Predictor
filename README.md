@@ -280,10 +280,11 @@ That service must run the full API from the repository root:
 |---|---|
 | Root Directory | *(empty — repository root)* |
 | Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
-| Variables | `WEATHERAPI_KEY`, `ECOPREDICT_API_KEY`, Solarman credentials |
+| Variables | `WEATHERAPI_KEY`, `ECOPREDICT_API_KEY`, `SOLARMAN_APP_ID`, `SOLARMAN_APP_SECRET`, `SOLARMAN_EMAIL`, `SOLARMAN_PASSWORD` |
 
 Check it with `curl https://ecopradict-mobile-production.up.railway.app/health` —
 it must report `"api": "full"`. `"api": "stub"` means Root Directory still points at `mobile/`.
+[`backend-health.yml`](.github/workflows/backend-health.yml) runs the same check every six hours.
 
 ### Mobile Features:
 - **Bilingual (KK / EN)**: Instant language switcher (Қазақша / English).
