@@ -18,6 +18,7 @@
 - Жаңа Android workflow: `mobile/` өзгерген әр push-та APK; `v*` тегінде keystore secrets болса — signed AAB.
 - CI: `test_forecast_endpoint` енді ауа райын mock арқылы алады; кілтсіз жағдай үшін бөлек тест қосылды; `tests/test_mobile_smoke.py` қосылды. Жергілікті нәтиже: 77/77.
 - README-дегі build командалары түзетілді.
+- **GitHub Actions-та тексерілді:** Android APK ✅ (run 36118256887, ~63 MB), iOS Simulator build ✅ (run 36118259702, ~86 MB). Бірінші iOS әрекеті Xcode 16.4 SDK-да `isiOSAppOnVision` жоқ болғандықтан құлады — workflow енді ең жаңа тұрақты Xcode-ты таңдайды. Artifact-тар 14 күн сақталады.
 
 **Қалғаны сізден (кодпен жасалмайды):**
 1. Railway: `ecopradict-mobile` сервисінде Root Directory-ді тазалау, Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`, айнымалыларды қою; `/health`-те `"api": "stub"` емес екенін тексеру. **Осыны жасамай бұл тармақты merge етсеңіз, қосымша backend таппайды** — бұрын ол басқа репоның сервисіне үнсіз ауысып жүрген.
