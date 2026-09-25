@@ -19,13 +19,16 @@ def synthetic_day_profile(seed: int = 42) -> pd.DataFrame:
     irradiance = 1000.0 * np.exp(-((t - 12) ** 2) / 18.0)
     irradiance = np.maximum(0.0, irradiance + rng.normal(0, 15, size=24))
     temp = 18.0 + 10.0 * np.exp(-((t - 14) ** 2) / 20.0)
-    return pd.DataFrame(
+    df = pd.DataFrame(
         {
             "time": hours,
             "temperature_c": temp,
             "irradiance_w_m2": irradiance,
         }
     )
+    # Callers report which profile a run actually used (see load_weather_profile).
+    df.attrs["source"] = "synthetic"
+    return df
 
 
 def load_sample_csv(path: Path | None = None) -> pd.DataFrame:
@@ -38,6 +41,7 @@ def load_sample_csv(path: Path | None = None) -> pd.DataFrame:
     # Expand sparse sample to 24h if needed
     if len(df) < 12:
         return synthetic_day_profile()
+    df.attrs["source"] = "sample"
     return df
 
 
@@ -82,6 +86,7 @@ def load_weather_profile(
                     )
                 df = pd.DataFrame(rows)
                 if not df.empty:
+                    df.attrs["source"] = "open-meteo"
                     return df
         except Exception:
             pass

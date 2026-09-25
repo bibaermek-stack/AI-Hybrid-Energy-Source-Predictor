@@ -1,11 +1,22 @@
-import asyncio
+"""
+Microgrid dispatch view for EcoPredict AI Mobile.
+
+Shows the dispatch POST /predict computes (src/optimization/hybrid_optimizer):
+how much of the available solar and wind is used, battery discharge, the
+shortfall left for the grid and the curtailed surplus. It used to read an
+`optimal_dispatch` block the API never sends, so "Solar Supply" displayed the
+available generation and battery/grid fell back to invented 50 kW / 0 kW.
+"""
+
 import flet as ft
 try:
     from mobile.state import state
     from mobile.api_client import api_client
+    from mobile import api_client as api_client_module
 except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
+    import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
 
 
 def build_optimization_view(page: ft.Page) -> ft.Control:
@@ -29,26 +40,51 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
         ],
     )
 
-    # Output text controls
-    txt_rec_source = ft.Text("⚡ Оңтайлы көз: Гибридті ЖЭК Микрожелісі", size=15, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_solar_kw = ft.Text("420.5 kW", size=14, color=c["accent"])
-    txt_wind_kw = ft.Text("400.1 kW", size=14, color=c["secondary"])
-    txt_bat_kw = ft.Text("50.0 kW", size=14, color=c["success"])
-    txt_grid_kw = ft.Text("0.0 kW", size=14, color=c["error"])
-    progress_ring = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2, color="#FFFFFF")
+    txt_status = ft.Text("", size=12, color=c["error"], visible=False, selectable=True)
+    txt_rec_source = ft.Text("⚡ Оңтайлы көз: —", size=15, weight=ft.FontWeight.BOLD, color=c["primary"])
+    txt_scenario = ft.Text("", size=11, color=c["text_secondary"])
+    progress_ring = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2)
 
-    async def on_optimize(e=None):
-        progress_ring.visible = True
-        page.update()
+    def value_row(label: str, color: str) -> tuple:
+        value = ft.Text("—", size=14, weight=ft.FontWeight.W_600, color=color)
+        return ft.Row([ft.Text(label, size=13), value], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), value
 
+    row_solar, txt_solar = value_row("☀️ Күн (пайдаланылды / қолжетімді)", c["accent"])
+    row_wind, txt_wind = value_row("💨 Жел (пайдаланылды / қолжетімді)", c["secondary"])
+    row_batt, txt_batt = value_row("🔋 Батареядан разряд", c["success"])
+    row_short, txt_short = value_row("🔌 Желіден алынады (жетіспеушілік)", c["error"])
+    row_curt, txt_curt = value_row("✂️ Артық өндіріс (curtailment)", c["text_secondary"])
+    row_rel, txt_rel = value_row("✅ Жүктемені жабу (reliability)", c["primary"])
+    row_cost, txt_cost = value_row("💲 Салыстырмалы құн", c["text_secondary"])
+
+    def _num(x) -> float:
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _read_inputs() -> str:
+        """Copy the fields into state; returns an error message or ''."""
         try:
             state.load_kw = float(tf_load.value or 0.0)
             state.battery_kw = float(tf_battery.value or 0.0)
             state.solar_cost = float(tf_solar_cost.value or 0.08)
             state.wind_cost = float(tf_wind_cost.value or 0.06)
-            state.strategy = dd_strategy.value or "hybrid"
         except ValueError:
-            pass
+            return "Сандарды дұрыс енгізіңіз (мысалы 450 немесе 0.08)."
+        state.strategy = dd_strategy.value or "hybrid"
+        return ""
+
+    async def on_optimize(e=None):
+        error = _read_inputs()
+        if error:
+            txt_status.value, txt_status.visible = error, True
+            page.update()
+            return
+
+        progress_ring.visible = True
+        txt_status.visible = False
+        page.update()
 
         res = await api_client.predict(
             irradiation=state.irradiation,
@@ -66,26 +102,35 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
             wind_cost_per_kwh=state.wind_cost,
             strategy=state.strategy,
         )
-
-        opt_src = res.get('recommended_source', 'Hybrid Renewable')
-        txt_rec_source.value = f"⚡ Оңтайлы көз: {opt_src}"
-        dispatch = res.get("optimal_dispatch") or {}
-        txt_solar_kw.value = f"{dispatch.get('solar_kw', res.get('solar_power', 420.5)):.1f} kW"
-        txt_wind_kw.value = f"{dispatch.get('wind_kw', res.get('wind_power', 400.1)):.1f} kW"
-        txt_bat_kw.value = f"{dispatch.get('battery_kw', min(state.battery_kw, 50.0)):.1f} kW"
-        txt_grid_kw.value = f"{dispatch.get('grid_kw', 0.0):.1f} kW"
         progress_ring.visible = False
+
+        if res is None:
+            reason = getattr(api_client_module, "last_http_error", "") or "себебі белгісіз"
+            txt_status.value = f"⚠️ Диспетчер есептелмеді. {reason}"
+            txt_status.visible = True
+            txt_rec_source.value = "⚡ Оңтайлы көз: —"
+            for t in (txt_solar, txt_wind, txt_batt, txt_short, txt_curt, txt_rel, txt_cost):
+                t.value = "—"
+            page.update()
+            return
+
+        txt_rec_source.value = f"⚡ Оңтайлы көз: {res.get('recommended_source', '—')}"
+        txt_scenario.value = (
+            f"Кіріс: {state.irradiation:.0f} W/m², жел {state.wind_speed:.1f} m/s "
+            f"(«ML Болжам» экранындағы мәндер) · жүктеме {state.load_kw:.0f} kW"
+        )
+        txt_solar.value = f"{_num(res.get('solar_used')):.1f} / {_num(res.get('solar_power')):.1f} kW"
+        txt_wind.value = f"{_num(res.get('wind_used')):.1f} / {_num(res.get('wind_power')):.1f} kW"
+        txt_batt.value = f"{_num(res.get('battery_used')):.1f} kW"
+        txt_short.value = f"{_num(res.get('shortfall_kw')):.1f} kW"
+        txt_curt.value = f"{_num(res.get('curtailment_kw')):.1f} kW"
+        txt_rel.value = f"{_num(res.get('reliability_index')) * 100:.0f} %"
+        cost = res.get("estimated_cost")
+        txt_cost.value = f"{_num(cost):.2f}" if cost is not None else "—"
         page.update()
 
-    # Trigger initial optimization on view load safely
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(on_optimize(None))
-    except RuntimeError:
-        pass
-
     btn_opt = ft.Button(
-        content=ft.Text(state.text("opt_btn")),
+        content=ft.Row([ft.Text(state.text("opt_btn")), progress_ring], tight=True, spacing=8),
         icon=ft.Icons.TUNE,
         style=ft.ButtonStyle(
             bgcolor=c["primary"],
@@ -99,12 +144,16 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
         content=ft.Column(
             [
                 txt_rec_source,
+                txt_scenario,
                 ft.Divider(height=1, color=c["card_border"]),
-                ft.Text("Optimal Dispatch Breakdown:", size=12, weight=ft.FontWeight.W_600, color=c["text_secondary"]),
-                ft.Row([ft.Text("☀️ Solar Supply:"), txt_solar_kw], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("💨 Wind Supply:"), txt_wind_kw], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("🔋 Battery Discharge:"), txt_bat_kw], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                ft.Row([ft.Text("⚡ Grid Import/Export:"), txt_grid_kw], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                row_solar,
+                row_wind,
+                row_batt,
+                row_short,
+                row_curt,
+                ft.Divider(height=1, color=c["card_border"]),
+                row_rel,
+                row_cost,
             ],
             spacing=8,
         ),
@@ -114,7 +163,7 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
         border=ft.Border.all(1, c["card_border"]),
     )
 
-    return ft.ListView(
+    view = ft.ListView(
         controls=[
             ft.Text("⚙ " + state.text("opt_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             tf_load,
@@ -122,9 +171,15 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
             ft.Row([ft.Container(tf_solar_cost, expand=True), ft.Container(tf_wind_cost, expand=True)], spacing=10),
             dd_strategy,
             btn_opt,
+            txt_status,
             card_results,
             ft.Container(height=20),
         ],
         spacing=10,
         padding=12,
+        expand=True,
     )
+    # Computed when the tab is opened (on_nav_change in main.py), not while
+    # main() is still building every view — that raced the splash transition.
+    view.data = on_optimize
+    return view

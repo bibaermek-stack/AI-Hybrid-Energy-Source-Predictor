@@ -209,6 +209,9 @@ python -m unittest discover -s tests -v
 | GET | `/solarman/weather` | Turkistan weather |
 | POST | `/solarman/configure` | 🔒 Set OpenAPI credentials — needs `X-API-Key` |
 | GET | `/solarman/status` | 🔒 Credential status — needs `X-API-Key` |
+| GET | `/metrics` | Paper metrics (`artifacts/model_metrics.json`) + live model feature importances |
+| POST | `/sustainability/impact` | CO₂ avoided, tree/car equivalents, self-sufficiency (`src/sustainability`) |
+| POST | `/labs/microgrid-day` | 24 h PV + battery + grid lab simulation (`src/simulation`) |
 
 🔒 = requires the `X-API-Key` header matching `ECOPREDICT_API_KEY`. These two routes
 read/write the Solarman credentials the whole process authenticates with, and the API

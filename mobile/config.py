@@ -106,7 +106,7 @@ LOCALIZATION = {
         # Optimization View
         "opt_title": "Микрожелілік Dispatch Оңтайландыру",
         "opt_load": "Жүктеме сұранысы (кВт)",
-        "opt_battery_cap": "Батарея сыйымдылығы (кВт/сағ)",
+        "opt_battery_cap": "Батареяның қолжетімді қуаты (кВт)",
         "opt_solar_cost": "Күн нарқы ($/кВт·сағ)",
         "opt_wind_cost": "Жел нарқы ($/кВт·сағ)",
         "opt_strategy": "Оңтайландыру стратегиясы",
@@ -191,7 +191,7 @@ LOCALIZATION = {
         # Optimization View
         "opt_title": "Microgrid Dispatch Optimization",
         "opt_load": "Load Demand (kW)",
-        "opt_battery_cap": "Battery Capacity (kWh)",
+        "opt_battery_cap": "Available battery power (kW)",
         "opt_solar_cost": "Solar Cost ($/kWh)",
         "opt_wind_cost": "Wind Cost ($/kWh)",
         "opt_strategy": "Dispatch Strategy",

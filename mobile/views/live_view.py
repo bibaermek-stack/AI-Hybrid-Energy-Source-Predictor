@@ -64,6 +64,22 @@ def build_live_view(page: ft.Page) -> ft.Control:
     # ---- status ----------------------------------------------------------
     txt_status = ft.Text("Жүктелуде…", size=14, weight=ft.FontWeight.BOLD, color=c["text_secondary"])
     txt_source = ft.Text("", size=11, color=c["text_secondary"])
+    # Without Solarman credentials the server answers with its sample payload
+    # (source "demo"). Those figures must never pass for the inverter's.
+    demo_banner = ft.Container(
+        content=ft.Text(
+            "🟡 ДЕМО деректер: серверде Solarman кілттері бапталмаған — "
+            "бұл нақты инвертордың көрсеткіштері емес.",
+            size=12,
+            weight=ft.FontWeight.W_600,
+            color=c["warning"],
+        ),
+        padding=10,
+        border_radius=10,
+        bgcolor=ft.Colors.with_opacity(0.12, c["warning"]),
+        border=ft.Border.all(1, c["warning"]),
+        visible=False,
+    )
     progress = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2)
 
     # ---- KPI cards -------------------------------------------------------
@@ -188,6 +204,7 @@ def build_live_view(page: ft.Page) -> ft.Control:
             txt_status.value = "⚠️ Телеметрия қолжетімсіз"
             txt_status.color = c["error"]
             txt_source.value = reason
+            demo_banner.visible = False
             for body in (body_basic, body_version, body_dc, body_ac, body_pr_result, body_roi_result, body_alert):
                 body.controls = []
             progress.visible = False
@@ -197,9 +214,15 @@ def build_live_view(page: ft.Page) -> ft.Control:
         latest.clear()
         latest.update(data)
 
+        is_demo = api_client.is_demo(data)
+        demo_banner.visible = is_demo
         online = basic.get("status") == 1
-        txt_status.value = "🟢 Қалыпты жұмыс" if online else "🔴 Байланыс жоқ"
-        txt_status.color = c["success"] if online else c["error"]
+        if is_demo:
+            txt_status.value = "🟡 Демо режим"
+            txt_status.color = c["warning"]
+        else:
+            txt_status.value = "🟢 Қалыпты жұмыс" if online else "🔴 Байланыс жоқ"
+            txt_status.color = c["success"] if online else c["error"]
         txt_source.value = f"дереккөз: {data.get('source', '—')} · {str(data.get('fetched_at', ''))[:19]}"
 
         ac_kw = _num(gen.get("ac_active_power_kw"))
@@ -356,6 +379,7 @@ def build_live_view(page: ft.Page) -> ft.Control:
             ft.Row([dd_inverters, progress], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Row([txt_status], alignment=ft.MainAxisAlignment.START),
             txt_source,
+            demo_banner,
             btn_refresh,
             ft.Container(height=6),
             kpi_grid,

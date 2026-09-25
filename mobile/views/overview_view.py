@@ -119,8 +119,19 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         subtitle_ref=ref_batt_sub,
     )
 
+    # The four cards are the ML model's answer for the inputs set on the
+    # predictions screen, not meter readings — say so above them.
+    ref_scenario = ft.Ref[ft.Text]()
+    kpi_caption = ft.Text(
+        "🧮 ML болжам (сценарий) — нақты өлшем емес",
+        size=11,
+        color=c["text_secondary"],
+        ref=ref_scenario,
+    )
+
     kpi_grid = ft.Column(
         [
+            kpi_caption,
             ft.Row([ft.Container(card_solar, expand=True), ft.Container(card_wind, expand=True)], spacing=10),
             ft.Row([ft.Container(card_load, expand=True), ft.Container(card_battery, expand=True)], spacing=10),
         ],
@@ -131,6 +142,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
     # so these three readings are pulled from /solarman/live rather than the
     # fixed 480.2 V / 14.5 A / 50.0 Hz that used to sit here.
     ref_pv_v, ref_pv_a, ref_hz = ft.Ref[ft.Text](), ft.Ref[ft.Text](), ft.Ref[ft.Text]()
+    ref_live_title = ft.Ref[ft.Text]()
 
     solarman_section = ft.Container(
         content=ft.Column(
@@ -140,7 +152,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
                         ft.Row(
                             [
                                 ft.Icon(ft.Icons.SENSORS, color=c["primary"], size=20),
-                                ft.Text("Solarman Инвертор Телеметриясы (Real-time)", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+                                ft.Text("Solarman Инвертор Телеметриясы", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"], ref=ref_live_title),
                             ]
                         ),
                         ft.IconButton(
@@ -253,6 +265,11 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
             state.load_kw,
             state.battery_kw,
         )
+        _set(
+            ref_scenario,
+            f"🧮 ML болжам (сценарий: {state.irradiation:.0f} W/m², жел {state.wind_speed:.1f} m/s, "
+            f"жүктеме {state.load_kw:.0f} kW) — нақты өлшем емес",
+        )
         if pred:
             _set(ref_solar, f"{float(pred.get('solar_power', 0.0)):.1f}")
             _set(ref_wind, f"{float(pred.get('wind_power', 0.0)):.1f}")
@@ -273,6 +290,10 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         dc = (gen.get("dc") or [{}])[0]
         ac = (gen.get("ac") or [{}])[0]
         if gen:
+            demo = api_client.is_demo(live)
+            _set(ref_live_title, "Solarman Инвертор Телеметриясы (ДЕМО)" if demo else "Solarman Инвертор Телеметриясы (Live)")
+            if ref_live_title.current is not None:
+                ref_live_title.current.color = c["warning"] if demo else c["text_primary"]
             _set(ref_pv_v, f"{dc.get('voltage_v', 0)} V")
             _set(ref_pv_a, f"{dc.get('current_a', 0)} A")
             _set(ref_hz, f"{ac.get('frequency_hz', 0)} Hz")
