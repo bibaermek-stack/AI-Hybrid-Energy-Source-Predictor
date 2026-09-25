@@ -84,4 +84,34 @@ jobs:
           else:
               print(f"::warning::/solarman/forecast -> {code}: {str(fc)[:200]} "
                     "(WEATHERAPI_KEY missing on the server? The 24h screen stays empty.)")
+
+          # Routes behind the Training, Sustainability and Labs screens. A 404
+          # means the deployed server predates them (Railway deploys main).
+          def post(path, payload, timeout=60):
+              req = urllib.request.Request(
+                  base + path,
+                  data=json.dumps(payload).encode(),
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=timeout) as r:
+                      return r.status
+              except urllib.error.HTTPError as e:
+                  return e.code
+              except Exception:
+                  return 0
+
+          screens = {
+              "/metrics (Training)": get("/metrics")[0],
+              "/sustainability/impact (Sustainability)": post(
+                  "/sustainability/impact", {"renewable_kwh": 1000}),
+              "/labs/microgrid-day (Labs)": post(
+                  "/labs/microgrid-day", {"weather": "synthetic"}),
+          }
+          for name, status in screens.items():
+              if status == 200:
+                  print(f"OK: {name}")
+              else:
+                  print(f"::warning::{name} -> {status} (server not redeployed from main yet?)")
           EOF
