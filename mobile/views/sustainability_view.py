@@ -24,11 +24,12 @@ except (ImportError, ModuleNotFoundError):
 def build_sustainability_view(page: ft.Page) -> ft.Control:
     """CO₂ impact calculator backed by the sustainability endpoint."""
     c = state.colors
+    t = state.text
 
     # Same starting values as the dashboard's Sustainability page.
-    tf_renewable = ft.TextField(label="ЖЭК энергиясы (кВт·сағ)", value="120000", keyboard_type=ft.KeyboardType.NUMBER)
-    tf_grid = ft.TextField(label="Желіден импорт (кВт·сағ)", value="20000", keyboard_type=ft.KeyboardType.NUMBER)
-    tf_factor = ft.TextField(label="Желі шығарындысы (кг CO₂/кВт·сағ)", value="0.45", keyboard_type=ft.KeyboardType.NUMBER)
+    tf_renewable = ft.TextField(label=t("su_renewable"), value="120000", keyboard_type=ft.KeyboardType.NUMBER)
+    tf_grid = ft.TextField(label=t("su_grid_import"), value="20000", keyboard_type=ft.KeyboardType.NUMBER)
+    tf_factor = ft.TextField(label=t("su_grid_factor"), value="0.45", keyboard_type=ft.KeyboardType.NUMBER)
     txt_input_source = ft.Text("", size=11, color=c["text_secondary"])
     txt_status = ft.Text("", size=12, color=c["error"], visible=False, selectable=True)
     progress = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2)
@@ -49,29 +50,29 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
         )
         return card, value
 
-    card_co2, val_co2 = stat_card(ft.Icons.CO2, "Болдырылмаған CO₂ (таза)", c["success"])
-    card_trees, val_trees = stat_card(ft.Icons.PARK, "Ағаштың жылдық сіңіруі", c["accent"])
-    card_cars, val_cars = stat_card(ft.Icons.DIRECTIONS_CAR, "Жылдық автокөлік шығарындысы", c["warning"])
-    card_emitted, val_emitted = stat_card(ft.Icons.FACTORY, "Импорттан шығарынды", c["error"])
+    card_co2, val_co2 = stat_card(ft.Icons.CO2, t("su_co2_net"), c["success"])
+    card_trees, val_trees = stat_card(ft.Icons.PARK, t("su_trees"), c["accent"])
+    card_cars, val_cars = stat_card(ft.Icons.DIRECTIONS_CAR, t("su_cars"), c["warning"])
+    card_emitted, val_emitted = stat_card(ft.Icons.FACTORY, t("su_emitted"), c["error"])
 
     bar_self = ft.ProgressBar(value=0, color=c["success"], bgcolor=ft.Colors.with_opacity(0.1, c["text_secondary"]), height=12)
     txt_self = ft.Text("—", size=13, weight=ft.FontWeight.BOLD, color=c["success"])
     txt_narrative = ft.Text("", size=12, color=c["text_secondary"])
 
-    def _read(tf: ft.TextField, name: str) -> float:
+    def _read(tf: ft.TextField) -> float:
         try:
             value = float((tf.value or "").replace(" ", "").replace(",", "."))
         except ValueError:
-            raise ValueError(f"«{name}» өрісіне сан енгізіңіз")
+            raise ValueError(t("su_err_number", field=tf.label))
         if value < 0:
-            raise ValueError(f"«{name}» теріс бола алмайды")
+            raise ValueError(t("su_err_negative", field=tf.label))
         return value
 
     async def calculate(e=None) -> None:
         try:
-            renewable = _read(tf_renewable, "ЖЭК энергиясы")
-            grid = _read(tf_grid, "Желіден импорт")
-            factor = _read(tf_factor, "Желі шығарындысы")
+            renewable = _read(tf_renewable)
+            grid = _read(tf_grid)
+            factor = _read(tf_factor)
         except ValueError as err:
             txt_status.value, txt_status.visible = str(err), True
             page.update()
@@ -84,8 +85,8 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
         progress.visible = False
 
         if res is None:
-            reason = getattr(api_client_module, "last_http_error", "") or "себебі белгісіз"
-            txt_status.value, txt_status.visible = f"⚠️ Есептелмеді. {reason}", True
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
+            txt_status.value, txt_status.visible = t("su_err_failed", reason=reason), True
             for v in (val_co2, val_trees, val_cars, val_emitted):
                 v.value = "—"
             page.update()
@@ -94,10 +95,10 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
         carbon = res.get("carbon") or {}
         energy = res.get("energy") or {}
         net_t = float(carbon.get("co2_net_benefit_kg") or 0.0) / 1000.0
-        val_co2.value = f"{net_t:,.1f} т".replace(",", " ")
-        val_trees.value = f"{float(carbon.get('trees_year_equiv') or 0.0):,.0f} ағаш·жыл".replace(",", " ")
-        val_cars.value = f"{float(carbon.get('cars_year_equiv') or 0.0):,.1f} көлік·жыл".replace(",", " ")
-        val_emitted.value = f"{float(carbon.get('co2_emitted_kg') or 0.0) / 1000.0:,.1f} т".replace(",", " ")
+        val_co2.value = t("su_tonnes", v=f"{net_t:,.1f}".replace(",", " "))
+        val_trees.value = t("su_tree_years", v=f"{float(carbon.get('trees_year_equiv') or 0.0):,.0f}".replace(",", " "))
+        val_cars.value = t("su_car_years", v=f"{float(carbon.get('cars_year_equiv') or 0.0):,.1f}".replace(",", " "))
+        val_emitted.value = t("su_tonnes", v=f"{float(carbon.get('co2_emitted_kg') or 0.0) / 1000.0:,.1f}".replace(",", " "))
         self_pct = float(energy.get("self_sufficiency_pct") or 0.0)
         bar_self.value = max(0.0, min(1.0, self_pct / 100.0))
         txt_self.value = f"{self_pct:.1f} %"
@@ -111,29 +112,29 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
         progress.visible = False
         total = ((live or {}).get("generation") or {}).get("e_total_kwh")
         if total is None:
-            reason = getattr(api_client_module, "last_http_error", "") or "жауапта e_total_kwh жоқ"
-            txt_input_source.value = f"⚠️ Инвертор деректері алынбады. {reason}"
+            reason = getattr(api_client_module, "last_http_error", "") or t("su_no_e_total")
+            txt_input_source.value = t("su_err_inverter", reason=reason)
             txt_input_source.color = c["error"]
             page.update()
             return
         tf_renewable.value = f"{float(total):.0f}"
         tf_grid.value = "0"
         if api_client.is_demo(live):
-            txt_input_source.value = "🟡 ДЕМО инвертор деректері (серверде Solarman кілттері жоқ)"
+            txt_input_source.value = t("su_inverter_demo")
             txt_input_source.color = c["warning"]
         else:
-            txt_input_source.value = f"✅ Инвертордың жалпы өндірісі · {str(live.get('fetched_at', ''))[:19]}"
+            txt_input_source.value = t("su_inverter_live", at=str(live.get("fetched_at", ""))[:19])
             txt_input_source.color = c["success"]
         await calculate()
 
     btn_calc = ft.Button(
-        content=ft.Row([ft.Text("Есептеу"), progress], tight=True, spacing=8),
+        content=ft.Row([ft.Text(t("su_btn_calc")), progress], tight=True, spacing=8),
         icon=ft.Icons.CALCULATE,
         style=ft.ButtonStyle(bgcolor=c["primary"], color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=12)),
         on_click=calculate,
     )
     btn_inverter = ft.OutlinedButton(
-        content=ft.Text("Инвертордың жалпы өндірісін алу"),
+        content=ft.Text(t("su_btn_inverter")),
         icon=ft.Icons.SOLAR_POWER,
         on_click=use_inverter_yield,
         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12)),
@@ -150,9 +151,9 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
     self_card = ft.Container(
         content=ft.Column(
             [
-                ft.Text("💚 Өзін-өзі қамтамасыз ету (ЖЭК үлесі)", size=13, weight=ft.FontWeight.BOLD),
+                ft.Text(t("su_self_title"), size=13, weight=ft.FontWeight.BOLD),
                 bar_self,
-                ft.Row([ft.Text("ЖЭК / (ЖЭК + импорт)", size=11, color=c["text_secondary"]), txt_self], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Row([ft.Text(t("su_self_formula"), size=11, color=c["text_secondary"]), txt_self], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                 txt_narrative,
             ],
             spacing=6,
@@ -165,8 +166,8 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
 
     view = ft.ListView(
         controls=[
-            ft.Text("🌱 Экологиялық тұрақтылық", size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
-            ft.Text("Есеп: src/sustainability (дашбордпен бірдей формулалар)", size=11, color=c["text_secondary"]),
+            ft.Text(t("su_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("su_source"), size=11, color=c["text_secondary"]),
             inputs,
             txt_status,
             ft.Row([card_co2, card_trees], spacing=10),

@@ -17,6 +17,7 @@ except (ImportError, ModuleNotFoundError):
 def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -> ft.Control:
     """Build home overview screen with string navigation callbacks and Solarman telemetry."""
     c = state.colors
+    t = state.text
 
     # Hero card
     hero_card = ft.Container(
@@ -35,13 +36,13 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
                     ]
                 ),
                 ft.Text(
-                    state.text("ov_hero_title"),
+                    t("ov_hero_title"),
                     size=18,
                     weight=ft.FontWeight.BOLD,
                     color="#FFFFFF",
                 ),
                 ft.Text(
-                    state.text("ov_hero_sub"),
+                    t("ov_hero_sub"),
                     size=12,
                     color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE),
                 ),
@@ -59,7 +60,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
 
     # Key Performance Indicators
     kpi_title = ft.Text(
-        "📊 " + state.text("ov_quick_actions"),
+        "📊 " + t("ov_quick_actions"),
         size=15,
         weight=ft.FontWeight.BOLD,
         color=c["text_primary"],
@@ -74,34 +75,34 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
     ref_batt, ref_batt_sub = ft.Ref[ft.Text](), ft.Ref[ft.Text]()
 
     card_solar = build_metric_card(
-        title=state.text("ov_kpi_solar"),
+        title=t("ov_kpi_solar"),
         value="—",
         unit="kW",
         icon=ft.Icons.WB_SUNNY,
         accent_color="#F59E0B",
-        subtitle="Жүктелуде…",
+        subtitle=t("loading"),
         value_ref=ref_solar,
         subtitle_ref=ref_solar_sub,
     )
 
     card_wind = build_metric_card(
-        title=state.text("ov_kpi_wind"),
+        title=t("ov_kpi_wind"),
         value="—",
         unit="kW",
         icon=ft.Icons.AIR,
         accent_color="#14B8A6",
-        subtitle="Жүктелуде…",
+        subtitle=t("loading"),
         value_ref=ref_wind,
         subtitle_ref=ref_wind_sub,
     )
 
     card_load = build_metric_card(
-        title=state.text("ov_kpi_load"),
+        title=t("ov_kpi_load"),
         value="—",
         unit="kW",
         icon=ft.Icons.POWER,
         accent_color="#EC4899",
-        subtitle="Жүктелуде…",
+        subtitle=t("loading"),
         value_ref=ref_load,
         subtitle_ref=ref_load_sub,
     )
@@ -109,12 +110,12 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
     # Shows dispatched battery power, not state of charge — the API exposes no
     # SoC, and deriving a percentage from dispatch would be a made-up number.
     card_battery = build_metric_card(
-        title=state.text("ov_kpi_battery"),
+        title=t("ov_kpi_battery"),
         value="—",
         unit="kW",
         icon=ft.Icons.BATTERY_CHARGING_FULL,
         accent_color="#10B981",
-        subtitle="Жүктелуде…",
+        subtitle=t("loading"),
         value_ref=ref_batt,
         subtitle_ref=ref_batt_sub,
     )
@@ -123,7 +124,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
     # predictions screen, not meter readings — say so above them.
     ref_scenario = ft.Ref[ft.Text]()
     kpi_caption = ft.Text(
-        "🧮 ML болжам (сценарий) — нақты өлшем емес",
+        t("ov_scenario_caption"),
         size=11,
         color=c["text_secondary"],
         ref=ref_scenario,
@@ -152,7 +153,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
                         ft.Row(
                             [
                                 ft.Icon(ft.Icons.SENSORS, color=c["primary"], size=20),
-                                ft.Text("Solarman Инвертор Телеметриясы", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"], ref=ref_live_title),
+                                ft.Text(t("ov_live_title"), size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"], ref=ref_live_title),
                             ]
                         ),
                         ft.IconButton(
@@ -168,21 +169,21 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
                     [
                         ft.Column(
                             [
-                                ft.Text("PV Кернеу:", size=11, color=c["text_secondary"]),
+                                ft.Text(t("ov_pv_voltage"), size=11, color=c["text_secondary"]),
                                 ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["primary"], ref=ref_pv_v),
                             ],
                             expand=True,
                         ),
                         ft.Column(
                             [
-                                ft.Text("PV Ток:", size=11, color=c["text_secondary"]),
+                                ft.Text(t("ov_pv_current"), size=11, color=c["text_secondary"]),
                                 ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["accent"], ref=ref_pv_a),
                             ],
                             expand=True,
                         ),
                         ft.Column(
                             [
-                                ft.Text("Желі жиілігі:", size=11, color=c["text_secondary"]),
+                                ft.Text(t("ov_grid_freq"), size=11, color=c["text_secondary"]),
                                 ft.Text("—", size=14, weight=ft.FontWeight.BOLD, color=c["secondary"], ref=ref_hz),
                             ],
                             expand=True,
@@ -190,7 +191,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
                     ],
                 ),
                 ft.OutlinedButton(
-                    content=ft.Row([ft.Icon(ft.Icons.ANALYTICS, size=16), ft.Text("Толық Solarman Телеметриясын Ашу", size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Icon(ft.Icons.ANALYTICS, size=16), ft.Text(t("ov_open_live"), size=12)], alignment=ft.MainAxisAlignment.CENTER),
                     on_click=lambda e: on_navigate_key("live"),
                     style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=10)),
                 ),
@@ -205,31 +206,31 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
 
     # Quick action shortcuts using string keys
     action_btn_predict = ft.Button(
-        content=ft.Row([ft.Icon(ft.Icons.LIGHTBULB, size=16), ft.Text("⚡ ML Лезде Болжау Жобалау")], alignment=ft.MainAxisAlignment.CENTER),
+        content=ft.Row([ft.Icon(ft.Icons.LIGHTBULB, size=16), ft.Text(t("ov_btn_predict"))], alignment=ft.MainAxisAlignment.CENTER),
         style=ft.ButtonStyle(
             bgcolor=c["primary"],
             color="#FFFFFF",
             shape=ft.RoundedRectangleBorder(radius=12),
         ),
-        on_click=lambda e: on_navigate_key("predictions"),
+        on_click=lambda e: on_navigate_key("forecast:ml"),
     )
 
     action_btn_forecast = ft.OutlinedButton(
-        content=ft.Row([ft.Icon(ft.Icons.SHOW_CHART, size=16), ft.Text("📈 24h Болжам")]),
+        content=ft.Row([ft.Icon(ft.Icons.SHOW_CHART, size=16), ft.Text(t("ov_btn_forecast"))]),
         style=ft.ButtonStyle(color=c["text_primary"], shape=ft.RoundedRectangleBorder(radius=12)),
-        on_click=lambda e: on_navigate_key("forecast"),
+        on_click=lambda e: on_navigate_key("forecast:24h"),
         expand=True,
     )
 
     action_btn_fault = ft.OutlinedButton(
-        content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=16), ft.Text("📷 YOLO Ақау")]),
+        content=ft.Row([ft.Icon(ft.Icons.CAMERA_ALT, size=16), ft.Text(t("ov_btn_fault"))]),
         style=ft.ButtonStyle(color=c["text_primary"], shape=ft.RoundedRectangleBorder(radius=12)),
         on_click=lambda e: on_navigate_key("faults"),
         expand=True,
     )
 
     action_btn_chat = ft.OutlinedButton(
-        content=ft.Row([ft.Icon(ft.Icons.CHAT, size=16), ft.Text("💬 AI Кеңесші")]),
+        content=ft.Row([ft.Icon(ft.Icons.CHAT, size=16), ft.Text(t("ov_btn_chat"))]),
         style=ft.ButtonStyle(color=c["text_primary"], shape=ft.RoundedRectangleBorder(radius=12)),
         on_click=lambda e: on_navigate_key("chat"),
         expand=True,
@@ -267,23 +268,22 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         )
         _set(
             ref_scenario,
-            f"🧮 ML болжам (сценарий: {state.irradiation:.0f} W/m², жел {state.wind_speed:.1f} m/s, "
-            f"жүктеме {state.load_kw:.0f} kW) — нақты өлшем емес",
+            t("ov_scenario_detail", irr=state.irradiation, wind=state.wind_speed, load=state.load_kw),
         )
         if pred:
             _set(ref_solar, f"{float(pred.get('solar_power', 0.0)):.1f}")
             _set(ref_wind, f"{float(pred.get('wind_power', 0.0)):.1f}")
             _set(ref_load, f"{float(pred.get('load_kw', state.load_kw)):.1f}")
-            _set(ref_solar_sub, f"Ұсыныс: {pred.get('recommended_source', '—')}")
-            _set(ref_wind_sub, f"Жел үлесі: {float(pred.get('wind_share', 0.0)) * 100:.0f}%")
-            _set(ref_load_sub, f"Сенімділік: {float(pred.get('reliability_index', 0.0)) * 100:.0f}%")
+            _set(ref_solar_sub, t("ov_sub_recommended", source=pred.get("recommended_source", "—")))
+            _set(ref_wind_sub, t("ov_sub_wind_share", pct=float(pred.get("wind_share", 0.0)) * 100))
+            _set(ref_load_sub, t("ov_sub_reliability", pct=float(pred.get("reliability_index", 0.0)) * 100))
             _set(ref_batt, f"{float(pred.get('battery_used', 0.0)):.1f}")
-            _set(ref_batt_sub, f"Диспетчер · {state.battery_kw:.0f} kWh сыйымдылық")
+            _set(ref_batt_sub, t("ov_sub_battery", kw=state.battery_kw))
         else:
             for r in (ref_solar, ref_wind, ref_load, ref_batt):
                 _set(r, "—")
             for r in (ref_solar_sub, ref_wind_sub, ref_load_sub, ref_batt_sub):
-                _set(r, "Деректер қолжетімсіз")
+                _set(r, t("data_unavailable"))
 
         live = await api_client.get_solarman_live()
         gen = (live or {}).get("generation") or {}
@@ -291,7 +291,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         ac = (gen.get("ac") or [{}])[0]
         if gen:
             demo = api_client.is_demo(live)
-            _set(ref_live_title, "Solarman Инвертор Телеметриясы (ДЕМО)" if demo else "Solarman Инвертор Телеметриясы (Live)")
+            _set(ref_live_title, t("ov_live_title_demo") if demo else t("ov_live_title_live"))
             if ref_live_title.current is not None:
                 ref_live_title.current.color = c["warning"] if demo else c["text_primary"]
             _set(ref_pv_v, f"{dc.get('voltage_v', 0)} V")

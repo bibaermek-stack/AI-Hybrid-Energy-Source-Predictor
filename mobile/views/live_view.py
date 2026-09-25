@@ -29,6 +29,7 @@ INVERTERS = ["2501221272", "2411046235"]
 
 def build_live_view(page: ft.Page) -> ft.Control:
     c = state.colors
+    t = state.text
     selected_sn = INVERTERS[0]
     latest: dict = {}
 
@@ -62,14 +63,13 @@ def build_live_view(page: ft.Page) -> ft.Control:
         ]
 
     # ---- status ----------------------------------------------------------
-    txt_status = ft.Text("Жүктелуде…", size=14, weight=ft.FontWeight.BOLD, color=c["text_secondary"])
+    txt_status = ft.Text(t("loading"), size=14, weight=ft.FontWeight.BOLD, color=c["text_secondary"])
     txt_source = ft.Text("", size=11, color=c["text_secondary"])
     # Without Solarman credentials the server answers with its sample payload
     # (source "demo"). Those figures must never pass for the inverter's.
     demo_banner = ft.Container(
         content=ft.Text(
-            "🟡 ДЕМО деректер: серверде Solarman кілттері бапталмаған — "
-            "бұл нақты инвертордың көрсеткіштері емес.",
+            t("live_demo_banner"),
             size=12,
             weight=ft.FontWeight.W_600,
             color=c["warning"],
@@ -97,32 +97,32 @@ def build_live_view(page: ft.Page) -> ft.Control:
     kpi_grid = ft.Column(
         [
             ft.Row([
-                ft.Container(kpi("AC қуаты", "kW", ft.Icons.BOLT, "#F59E0B", r_ac, r_ac_s), expand=True),
-                ft.Container(kpi("DC қуаты", "kW", ft.Icons.SOLAR_POWER, "#3B82F6", r_dc, r_dc_s), expand=True),
+                ft.Container(kpi(t("live_kpi_ac"), "kW", ft.Icons.BOLT, "#F59E0B", r_ac, r_ac_s), expand=True),
+                ft.Container(kpi(t("live_kpi_dc"), "kW", ft.Icons.SOLAR_POWER, "#3B82F6", r_dc, r_dc_s), expand=True),
             ], spacing=10),
             ft.Row([
-                ft.Container(kpi("ПӘК (AC/DC)", "%", ft.Icons.SPEED, "#10B981", r_eff, r_eff_s), expand=True),
-                ft.Container(kpi("Температура", "°C", ft.Icons.THERMOSTAT, "#EC4899", r_temp, r_temp_s), expand=True),
+                ft.Container(kpi(t("live_kpi_eff"), "%", ft.Icons.SPEED, "#10B981", r_eff, r_eff_s), expand=True),
+                ft.Container(kpi(t("live_kpi_temp"), "°C", ft.Icons.THERMOSTAT, "#EC4899", r_temp, r_temp_s), expand=True),
             ], spacing=10),
             ft.Row([
-                ft.Container(kpi("Бүгінгі", "kWh", ft.Icons.TODAY, "#14B8A6", r_today, r_today_s), expand=True),
-                ft.Container(kpi("Жалпы", "kWh", ft.Icons.HISTORY, "#8B5CF6", r_total, r_total_s), expand=True),
+                ft.Container(kpi(t("live_kpi_today"), "kWh", ft.Icons.TODAY, "#14B8A6", r_today, r_today_s), expand=True),
+                ft.Container(kpi(t("live_kpi_total"), "kWh", ft.Icons.HISTORY, "#8B5CF6", r_total, r_total_s), expand=True),
             ], spacing=10),
         ],
         spacing=10,
     )
 
-    card_basic, body_basic = card("📋 Негізгі ақпарат")
-    card_version, body_version = card("🔧 Нұсқа ақпараты")
-    card_dc, body_dc = card("⚡ DC стрингтер (MPPT)")
-    card_ac, body_ac = card("🔌 AC фазалар")
-    card_weather, body_weather = card("🌤 Ауа райы (Түркістан)")
-    card_alert, body_alert = card("🔔 Күй тексерісі")
+    card_basic, body_basic = card(t("live_card_basic"))
+    card_version, body_version = card(t("live_card_version"))
+    card_dc, body_dc = card(t("live_card_dc"))
+    card_ac, body_ac = card(t("live_card_ac"))
+    card_weather, body_weather = card(t("live_card_weather"))
+    card_alert, body_alert = card(t("live_card_alert"))
 
     # ---- Performance Ratio ----------------------------------------------
     txt_irr_val = ft.Text("800 W/m²", size=12, weight=ft.FontWeight.BOLD, color=c["primary"])
     sl_irr = ft.Slider(min=1, max=1200, value=800, divisions=24)
-    card_pr, body_pr = card("📐 Өнімділік коэффициенті (PR)")
+    card_pr, body_pr = card(t("live_card_pr"))
     # Results live in their own column; writing them into body_pr would wipe
     # out the slider above and leave the inputs unusable after the first load.
     body_pr_result = ft.Column([], spacing=6)
@@ -132,7 +132,7 @@ def build_live_view(page: ft.Page) -> ft.Control:
     sl_capex = ft.Slider(min=1_000_000, max=60_000_000, value=15_000_000, divisions=59)
     txt_tariff_val = ft.Text("28 ₸/kWh", size=12, weight=ft.FontWeight.BOLD, color=c["primary"])
     sl_tariff = ft.Slider(min=5, max=120, value=28, divisions=23)
-    card_roi, body_roi = card("💰 Экономика (ROI, ₸)")
+    card_roi, body_roi = card(t("live_card_roi"))
     body_roi_result = ft.Column([], spacing=6)
 
     def _num(x, default=0.0) -> float:
@@ -159,14 +159,14 @@ def build_live_view(page: ft.Page) -> ft.Control:
             ambient_temp_c=_num((latest.get("weather") or {}).get("temperature_2m_c"), 25.0),
         )
         if not res:
-            body_pr_result.controls = kv_rows([("Күй", "есептелмеді")])
+            body_pr_result.controls = kv_rows([(t("live_status_label"), t("not_computed"))])
         else:
             body_pr_result.controls = kv_rows([
-                ("Ағымдағы қуат", f"{_num(res.get('active_power_kw')):.3f} kW"),
-                ("Күтілетін қуат", f"{_num(res.get('expected_power_kw')):.2f} kW"),
-                ("Ұяшық температурасы", f"{_num(res.get('cell_temp_c')):.1f} °C"),
-                ("PR (шикі)", f"{_num(res.get('raw_pr')) * 100:.1f} %"),
-                ("PR (түзетілген)", f"{_num(res.get('corrected_pr')) * 100:.1f} %"),
+                (t("live_pr_active"), f"{_num(res.get('active_power_kw')):.3f} kW"),
+                (t("live_pr_expected"), f"{_num(res.get('expected_power_kw')):.2f} kW"),
+                (t("live_pr_cell_temp"), f"{_num(res.get('cell_temp_c')):.1f} °C"),
+                (t("live_pr_raw"), f"{_num(res.get('raw_pr')) * 100:.1f} %"),
+                (t("live_pr_corrected"), f"{_num(res.get('corrected_pr')) * 100:.1f} %"),
             ])
         page.update()
 
@@ -178,20 +178,20 @@ def build_live_view(page: ft.Page) -> ft.Control:
             tariff_kzt_per_kwh=float(sl_tariff.value or 28),
         )
         if not res:
-            body_roi_result.controls = kv_rows([("Күй", "есептелмеді")])
+            body_roi_result.controls = kv_rows([(t("live_status_label"), t("not_computed"))])
         else:
             body_roi_result.controls = kv_rows([
-                ("Инвестиция", f"{_num(res.get('initial_investment_kzt')):,.0f} ₸".replace(",", " ")),
-                ("Жиынтық үнем", f"{_num(res.get('cumulative_savings_kzt')):,.0f} ₸".replace(",", " ")),
-                ("Таза пайда", f"{_num(res.get('net_profit_kzt')):,.0f} ₸".replace(",", " ")),
+                (t("live_roi_investment"), f"{_num(res.get('initial_investment_kzt')):,.0f} ₸".replace(",", " ")),
+                (t("live_roi_savings"), f"{_num(res.get('cumulative_savings_kzt')):,.0f} ₸".replace(",", " ")),
+                (t("live_roi_profit"), f"{_num(res.get('net_profit_kzt')):,.0f} ₸".replace(",", " ")),
                 ("ROI", f"{_num(res.get('roi_pct')):.1f} %"),
-                ("Өзін-өзі өтеу", f"{_num(res.get('payback_period_years')):.1f} жыл"),
+                (t("live_roi_payback"), t("years", v=_num(res.get("payback_period_years")))),
             ])
         page.update()
 
     async def load(e=None) -> None:
         progress.visible = True
-        txt_status.value = "Жүктелуде…"
+        txt_status.value = t("loading")
         page.update()
 
         data = await api_client.get_solarman_live(selected_sn)
@@ -200,8 +200,8 @@ def build_live_view(page: ft.Page) -> ft.Control:
         version = (data or {}).get("version") or {}
 
         if not gen:
-            reason = getattr(api_client_module, "last_http_error", "") or "жауап бос"
-            txt_status.value = "⚠️ Телеметрия қолжетімсіз"
+            reason = getattr(api_client_module, "last_http_error", "") or t("live_empty_reply")
+            txt_status.value = t("live_unavailable")
             txt_status.color = c["error"]
             txt_source.value = reason
             demo_banner.visible = False
@@ -218,12 +218,12 @@ def build_live_view(page: ft.Page) -> ft.Control:
         demo_banner.visible = is_demo
         online = basic.get("status") == 1
         if is_demo:
-            txt_status.value = "🟡 Демо режим"
+            txt_status.value = t("live_demo_mode")
             txt_status.color = c["warning"]
         else:
-            txt_status.value = "🟢 Қалыпты жұмыс" if online else "🔴 Байланыс жоқ"
+            txt_status.value = t("live_normal") if online else t("live_no_link")
             txt_status.color = c["success"] if online else c["error"]
-        txt_source.value = f"дереккөз: {data.get('source', '—')} · {str(data.get('fetched_at', ''))[:19]}"
+        txt_source.value = t("live_source", source=data.get("source", "—"), at=str(data.get("fetched_at", ""))[:19])
 
         ac_kw = _num(gen.get("ac_active_power_kw"))
         dc_kw = _num(gen.get("dc_total_kw"))
@@ -240,29 +240,29 @@ def build_live_view(page: ft.Page) -> ft.Control:
             if sref.current is not None:
                 sref.current.value = sub
 
-        setv(r_ac, r_ac_s, f"{ac_kw:.2f}", f"номинал {rated:.0f} kW")
-        setv(r_dc, r_dc_s, f"{dc_kw:.2f}", f"{len(gen.get('dc') or [])} стринг")
+        setv(r_ac, r_ac_s, f"{ac_kw:.2f}", t("live_sub_rated", kw=rated))
+        setv(r_dc, r_dc_s, f"{dc_kw:.2f}", t("live_sub_strings", n=len(gen.get("dc") or [])))
         setv(r_eff, r_eff_s, f"{eff:.1f}" if eff_known else "—",
-             "AC / DC" if eff_known else "қуат тым төмен")
-        setv(r_temp, r_temp_s, f"{_num(gen.get('temperature_c')):.1f}", "инвертор")
-        setv(r_today, r_today_s, f"{_num(gen.get('e_today_kwh')):.1f}", "бүгінгі өндіріс")
-        setv(r_total, r_total_s, f"{_num(gen.get('e_total_kwh')):.0f}", "жұмыс ғұмырында")
+             "AC / DC" if eff_known else t("live_sub_low_power"))
+        setv(r_temp, r_temp_s, f"{_num(gen.get('temperature_c')):.1f}", t("live_sub_inverter"))
+        setv(r_today, r_today_s, f"{_num(gen.get('e_today_kwh')):.1f}", t("live_sub_today"))
+        setv(r_total, r_total_s, f"{_num(gen.get('e_total_kwh')):.0f}", t("live_sub_lifetime"))
 
         body_basic.controls = kv_rows([
-            ("Сериялық нөмір", basic.get("sn", "—")),
-            ("Құрылғы ID", basic.get("device_id", "—")),
-            ("Түрі", basic.get("inverter_type", "—")),
-            ("Номинал қуат", f"{rated:.1f} kW"),
-            ("MPPT саны", basic.get("mppt_no", "—")),
-            ("Күй", "Онлайн" if online else "Офлайн"),
+            (t("live_serial"), basic.get("sn", "—")),
+            (t("live_device_id"), basic.get("device_id", "—")),
+            (t("live_type"), basic.get("inverter_type", "—")),
+            (t("live_rated"), f"{rated:.1f} kW"),
+            (t("live_mppt_count"), basic.get("mppt_no", "—")),
+            (t("live_status_label"), t("online") if online else t("offline")),
         ])
 
         body_version.controls = kv_rows([
-            ("Протокол", version.get("protocol_version", "—")),
-            ("Негізгі", version.get("main", "—")),
+            (t("live_protocol"), version.get("protocol_version", "—")),
+            (t("live_main_fw"), version.get("main", "—")),
             ("HMI", version.get("hmi", "—")),
-            ("Басқару SW", version.get("control_sw_v1", "—")),
-            ("Басқару SW v2", version.get("control_sw_v2", "—")),
+            (t("live_control_sw"), version.get("control_sw_v1", "—")),
+            (t("live_control_sw2"), version.get("control_sw_v2", "—")),
             ("Comm CPU", version.get("comm_cpu_sw", "—")),
         ])
 
@@ -272,30 +272,30 @@ def build_live_view(page: ft.Page) -> ft.Control:
                 f"{_num(s.get('voltage_v')):.1f} V · {_num(s.get('current_a')):.1f} A · {_num(s.get('power_kw')):.2f} kW",
             )
             for i, s in enumerate(gen.get("dc") or [])
-        ]) or kv_rows([("Стрингтер", "деректер жоқ")])
+        ]) or kv_rows([(t("live_strings"), t("no_data"))])
 
         body_ac.controls = kv_rows([
             (
-                f"Фаза {p.get('phase', '?')}",
+                t("live_phase", phase=p.get("phase", "?")),
                 f"{_num(p.get('voltage_v')):.1f} V · {_num(p.get('current_a')):.1f} A"
                 + (f" · {_num(p.get('frequency_hz')):.2f} Hz" if p.get("frequency_hz") is not None else "")
                 + f" · {_num(p.get('power_kw')):.2f} kW",
             )
             for p in (gen.get("ac") or [])
-        ]) or kv_rows([("Фазалар", "деректер жоқ")])
+        ]) or kv_rows([(t("live_phases"), t("no_data"))])
 
         weather = await api_client.get_weather()
         if weather:
             latest["weather"] = weather
             body_weather.controls = kv_rows([
-                ("Орналасқан жері", weather.get("location", "—")),
-                ("Температура", f"{_num(weather.get('temperature_2m_c')):.1f} °C"),
-                ("Бұлттылық", f"{_num(weather.get('cloud_cover_pct')):.0f} %"),
-                ("UV индексі", f"{_num(weather.get('uv_index')):.1f}"),
-                ("Дереккөз", weather.get("source", "—")),
+                (t("live_location"), weather.get("location", "—")),
+                (t("live_temperature"), f"{_num(weather.get('temperature_2m_c')):.1f} °C"),
+                (t("live_cloud"), f"{_num(weather.get('cloud_cover_pct')):.0f} %"),
+                (t("live_uv"), f"{_num(weather.get('uv_index')):.1f}"),
+                (t("live_data_source"), weather.get("source", "—")),
             ])
         else:
-            body_weather.controls = kv_rows([("Ауа райы", "қолжетімсіз")])
+            body_weather.controls = kv_rows([(t("live_weather_label"), t("unavailable"))])
 
         alert = await api_client.solarman_alert({
             "deviceSn": str(basic.get("sn") or selected_sn),
@@ -304,14 +304,14 @@ def build_live_view(page: ft.Page) -> ft.Control:
             "deviceStatus": basic.get("status", 1),
         })
         if alert:
-            msg = alert.get("alert_message") or "Ескерту жоқ"
+            msg = alert.get("alert_message") or t("live_no_alerts")
             body_alert.controls = kv_rows([
-                ("Офлайн", "иә" if alert.get("is_offline") else "жоқ"),
-                ("Ақау", "иә" if alert.get("is_faulty") else "жоқ"),
-                ("Хабарлама жіберілді", "иә" if alert.get("alert_sent") else "жоқ"),
+                (t("offline"), t("yes") if alert.get("is_offline") else t("no")),
+                (t("live_fault"), t("yes") if alert.get("is_faulty") else t("no")),
+                (t("live_alert_sent"), t("yes") if alert.get("alert_sent") else t("no")),
             ]) + [ft.Text(msg[:160], size=11, color=c["text_secondary"])]
         else:
-            body_alert.controls = kv_rows([("Тексеріс", "орындалмады")])
+            body_alert.controls = kv_rows([(t("live_check"), t("not_run"))])
 
         await compute_pr()
         await compute_roi()
@@ -326,7 +326,7 @@ def build_live_view(page: ft.Page) -> ft.Control:
         await load()
 
     dd_inverters = ft.Dropdown(
-        label="Инвертор",
+        label=t("live_inverter"),
         value=selected_sn,
         options=[ft.DropdownOption(key=sn, text=f"SN {sn}") for sn in INVERTERS],
         # flet 0.86 renamed the Dropdown callback: on_change no longer exists.
@@ -334,23 +334,32 @@ def build_live_view(page: ft.Page) -> ft.Control:
         dense=True,
     )
 
-    async def on_irr_change(e):
+    # Labels follow the thumb on every tick; the backend is called once, when
+    # the drag ends. Calling it from on_change fired a request per tick.
+    def on_irr_change(e):
         txt_irr_val.value = f"{float(sl_irr.value):.0f} W/m²"
         page.update()
-        await compute_pr()
 
-    async def on_money_change(e):
+    def on_money_change(e):
         txt_capex_val.value = f"{float(sl_capex.value):,.0f} ₸".replace(",", " ")
         txt_tariff_val.value = f"{float(sl_tariff.value):.0f} ₸/kWh"
         page.update()
+
+    async def on_irr_change_end(e):
+        await compute_pr()
+
+    async def on_money_change_end(e):
         await compute_roi()
 
     sl_irr.on_change = on_irr_change
+    sl_irr.on_change_end = on_irr_change_end
     sl_capex.on_change = on_money_change
+    sl_capex.on_change_end = on_money_change_end
     sl_tariff.on_change = on_money_change
+    sl_tariff.on_change_end = on_money_change_end
 
     btn_refresh = ft.Button(
-        content=ft.Row([ft.Icon(ft.Icons.REFRESH, size=16), ft.Text("Жаңарту")],
+        content=ft.Row([ft.Icon(ft.Icons.REFRESH, size=16), ft.Text(t("refresh"))],
                        alignment=ft.MainAxisAlignment.CENTER),
         on_click=load,
         style=ft.ButtonStyle(bgcolor=c["primary"], color="#FFFFFF",
@@ -358,16 +367,16 @@ def build_live_view(page: ft.Page) -> ft.Control:
     )
 
     body_pr.controls = [
-        ft.Row([ft.Text("Күн радиациясы:", size=12, color=c["text_secondary"]), txt_irr_val],
+        ft.Row([ft.Text(t("live_pr_irradiance"), size=12, color=c["text_secondary"]), txt_irr_val],
                alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         sl_irr,
         body_pr_result,
     ]
     body_roi.controls = [
-        ft.Row([ft.Text("Инвестиция (CAPEX):", size=12, color=c["text_secondary"]), txt_capex_val],
+        ft.Row([ft.Text(t("live_roi_capex"), size=12, color=c["text_secondary"]), txt_capex_val],
                alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         sl_capex,
-        ft.Row([ft.Text("Тариф:", size=12, color=c["text_secondary"]), txt_tariff_val],
+        ft.Row([ft.Text(t("live_roi_tariff"), size=12, color=c["text_secondary"]), txt_tariff_val],
                alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
         sl_tariff,
         body_roi_result,
@@ -375,7 +384,7 @@ def build_live_view(page: ft.Page) -> ft.Control:
 
     view = ft.ListView(
         controls=[
-            ft.Text("📡 " + state.text("live_title"), size=18, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text("📡 " + t("live_title"), size=18, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Row([dd_inverters, progress], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Row([txt_status], alignment=ft.MainAxisAlignment.START),
             txt_source,

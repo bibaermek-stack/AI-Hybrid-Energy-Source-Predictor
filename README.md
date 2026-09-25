@@ -290,9 +290,12 @@ it must report `"api": "full"`. `"api": "stub"` means Root Directory still point
 [`backend-health.yml`](.github/workflows/backend-health.yml) runs the same check every six hours.
 
 ### Mobile Features:
-- **Bilingual (KK / EN)**: Instant language switcher (Қазақша / English).
-- **Screens**: Overview, ML predictions, 24h forecast, YOLO fault diagnostics, model training,
-  optimization, sustainability, labs, AI advisor, Solarman live, settings.
+- **Navigation**: five tabs — Home · Forecast (instant ML + 24 h) · Solarman · AI Advisor · More
+  (YOLO faults, optimization, sustainability, lab, ML models, learn, settings). Bottom bar on
+  phones, navigation rail from 600 px.
+- **Bilingual (KK / EN)**: every string lives in `mobile/i18n.py` as a (kk, en) pair;
+  `tests/test_mobile_i18n.py` fails on a missing translation or a hardcoded string.
+- **Remembers** language and theme between launches (SharedPreferences).
 
 ### Building Mobile Binaries:
 ```bash

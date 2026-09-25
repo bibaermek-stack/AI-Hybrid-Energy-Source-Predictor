@@ -19,25 +19,26 @@ except (ImportError, ModuleNotFoundError):
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
     import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
 
-# Readable names for the models' raw training columns.
-FEATURE_LABELS = {
-    "IRRADIATION": "Күн радиациясы",
-    "AMBIENT_TEMPERATURE": "Ауа температурасы",
-    "MODULE_TEMPERATURE": "Панель температурасы",
-    "hour": "Сағат",
-    "day": "Күн (айдың)",
-    "month": "Ай",
-    "Wind Speed (m/s)": "Жел жылдамдығы",
-    "Wind Direction (°)": "Жел бағыты",
-    "Theoretical_Power_Curve (KWh)": "Теориялық қуат қисығы",
+# i18n keys for the models' raw training column names.
+FEATURE_KEYS = {
+    "IRRADIATION": "feat_irradiation",
+    "AMBIENT_TEMPERATURE": "feat_ambient",
+    "MODULE_TEMPERATURE": "feat_module",
+    "hour": "feat_hour",
+    "day": "feat_day",
+    "month": "feat_month",
+    "Wind Speed (m/s)": "feat_wind_speed",
+    "Wind Direction (°)": "feat_wind_dir",
+    "Theoretical_Power_Curve (KWh)": "feat_theoretical",
 }
 
 
 def build_training_view(page: ft.Page) -> ft.Control:
     """Model accuracy and feature importance, loaded from the backend."""
     c = state.colors
+    t = state.text
 
-    txt_status = ft.Text("Жүктелуде…", size=12, color=c["text_secondary"], selectable=True)
+    txt_status = ft.Text(t("loading"), size=12, color=c["text_secondary"], selectable=True)
 
     def metric_card(title: str, color: str) -> tuple:
         value = ft.Text("—", size=18, weight=ft.FontWeight.BOLD, color=color)
@@ -84,7 +85,7 @@ def build_training_view(page: ft.Page) -> ft.Control:
 
     def importance_rows(items: list, color: str) -> list:
         if not items:
-            return [ft.Text("Модель серверде жүктелмеген", size=12, color=c["text_secondary"])]
+            return [ft.Text(t("tr_model_not_loaded"), size=12, color=c["text_secondary"])]
         rows = []
         for item in items:
             ratio = max(0.0, min(1.0, float(item.get("importance") or 0.0)))
@@ -94,7 +95,7 @@ def build_training_view(page: ft.Page) -> ft.Control:
                     [
                         ft.Row(
                             [
-                                ft.Text(FEATURE_LABELS.get(name, name), size=12, weight=ft.FontWeight.W_500),
+                                ft.Text(t(FEATURE_KEYS[name]) if name in FEATURE_KEYS else name, size=12, weight=ft.FontWeight.W_500),
                                 ft.Text(f"{ratio * 100:.1f}%", size=12, weight=ft.FontWeight.BOLD, color=color),
                             ],
                             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -122,8 +123,8 @@ def build_training_view(page: ft.Page) -> ft.Control:
     async def load() -> None:
         data = await api_client.get_metrics()
         if data is None:
-            reason = getattr(api_client_module, "last_http_error", "") or "себебі белгісіз"
-            txt_status.value = f"⚠️ Метрикалар алынбады. {reason}"
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
+            txt_status.value = t("tr_err_metrics", reason=reason)
             txt_status.color = c["error"]
             txt_status.visible = True
             page.update()
@@ -138,12 +139,12 @@ def build_training_view(page: ft.Page) -> ft.Control:
         ):
             m = solar.get(key) or {}
             val.value = _r2(m.get("r2"))
-            sub.value = f"MAE {m['mae_kw']} kW" if m.get("mae_kw") is not None else ""
+            sub.value = t("tr_mae", mae=m["mae_kw"]) if m.get("mae_kw") is not None else ""
 
         test = (data.get("yolo11n") or {}).get("test") or {}
-        val_map.value, sub_map.value = _pct(test.get("mAP50")), f"тест: {test.get('images', '—')} сурет"
-        val_prec.value, sub_prec.value = _pct(test.get("precision")), "тест жиыны"
-        val_rec.value, sub_rec.value = _pct(test.get("recall")), "тест жиыны"
+        val_map.value, sub_map.value = _pct(test.get("mAP50")), t("tr_test_images", n=test.get("images", "—"))
+        val_prec.value, sub_prec.value = _pct(test.get("precision")), t("tr_test_set")
+        val_rec.value, sub_rec.value = _pct(test.get("recall")), t("tr_test_set")
 
         importance = data.get("feature_importance") or {}
         solar_importance.controls = importance_rows(importance.get("solar") or [], c["accent"])
@@ -152,15 +153,15 @@ def build_training_view(page: ft.Page) -> ft.Control:
 
     view = ft.ListView(
         controls=[
-            ft.Text("🎓 ML модельдерінің нәтижелері", size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
-            ft.Text("Дереккөз: artifacts/model_metrics.json (мақаладағы бекітілген метрикалар)", size=11, color=c["text_secondary"]),
+            ft.Text(t("tr_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("tr_source"), size=11, color=c["text_secondary"]),
             txt_status,
-            ft.Text("☀️ Күн өндірісін болжау", size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("tr_solar_heading"), size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Row([card_rf, card_xgb, card_lstm], spacing=8),
-            ft.Text("🔍 Ақау анықтау (YOLO11n)", size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("tr_yolo_heading"), size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Row([card_map, card_prec, card_rec], spacing=8),
-            section("📊 Күн моделі — белгілердің маңыздылығы (RandomForest)", solar_importance),
-            section("📊 Жел моделі — белгілердің маңыздылығы (XGBoost)", wind_importance),
+            section(t("tr_solar_importance"), solar_importance),
+            section(t("tr_wind_importance"), wind_importance),
             ft.Container(height=20),
         ],
         spacing=12,

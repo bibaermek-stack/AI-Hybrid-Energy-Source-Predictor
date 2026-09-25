@@ -15,7 +15,7 @@
 
 [project]
 name = "ecopredict-ai-mobile"
-version = "1.0.0"
+version = "1.1.0"
 description = "EcoPredict AI — cross-platform mobile client"
 requires-python = ">=3.9"
 dependencies = [

@@ -2,7 +2,7 @@
 Global Application State Manager for EcoPredict AI Mobile.
 """
 
-from typing import Callable, Dict, Any, List
+from typing import Callable, Dict, List, Tuple
 try:
     from mobile.config import DEFAULT_API_BASE, COLORS, get_text
 except (ImportError, ModuleNotFoundError):
@@ -41,6 +41,12 @@ class AppState:
         self.strategy: str = "hybrid"
 
         self.active_tab: str = "overview"
+        # Which panel the Forecast tab shows: "ml" (instant) or "24h".
+        self.forecast_segment: str = "ml"
+        # (role, text) with role "user" | "ai" | "error". Kept here, not in the
+        # chat view, so the conversation survives the view being rebuilt when
+        # the language or theme changes.
+        self.chat_history: List[Tuple[str, str]] = []
         self._listeners: List[Callable[[], None]] = []
 
     @property
@@ -51,16 +57,22 @@ class AppState:
     def colors(self) -> Dict[str, str]:
         return COLORS[self.theme_mode]
 
-    def text(self, key: str, default: str = "") -> str:
-        return get_text(self.lang, key, default)
+    def text(self, key: str, default: str = "", **fmt) -> str:
+        """Localized string for the current language; keyword args fill {placeholders}."""
+        return get_text(self.lang, key, default, **fmt)
 
     def toggle_theme(self):
         self.theme_mode = "light" if self.theme_mode == "dark" else "dark"
         self.notify()
 
     def set_language(self, lang: str):
-        if lang in ("kk", "en"):
+        if lang in ("kk", "en") and lang != self.lang:
             self.lang = lang
+            self.notify()
+
+    def set_theme(self, mode: str):
+        if mode in ("dark", "light") and mode != self.theme_mode:
+            self.theme_mode = mode
             self.notify()
 
     def set_api_url(self, url: str):

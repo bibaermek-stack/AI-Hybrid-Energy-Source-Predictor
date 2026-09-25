@@ -18,16 +18,21 @@ except (ImportError, ModuleNotFoundError):
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
     import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
 
-WEATHER_LABELS = {
-    "sample": "Үлгі күн (CSV)",
-    "synthetic": "Синтетикалық күн",
-    "open-meteo": "Open-Meteo · Түркістан",
+# Weather profile id -> i18n key.
+WEATHER_KEYS = {
+    "sample": "lab_weather_sample",
+    "synthetic": "lab_weather_synthetic",
+    "open-meteo": "lab_weather_openmeteo",
 }
 
 
 def build_labs_view(page: ft.Page) -> ft.Control:
     """24 h PV + battery + grid simulation with the dashboard's lab parameters."""
     c = state.colors
+    t = state.text
+
+    def weather_label(source: str) -> str:
+        return t(WEATHER_KEYS[source]) if source in WEATHER_KEYS else source
 
     def slider_row(label: str, unit: str, lo: float, hi: float, value: float, step: float) -> tuple:
         txt = ft.Text(f"{value:.0f} {unit}", size=11, weight=ft.FontWeight.BOLD, color=c["primary"])
@@ -42,15 +47,15 @@ def build_labs_view(page: ft.Page) -> ft.Control:
         return row, slider
 
     # Ranges and defaults match dashboard/views/labs.py (_lab_microgrid).
-    row_panels, sl_panels = slider_row("☀️ Панель саны", "дана", 20, 400, 100, 10)
-    row_batt, sl_batt = slider_row("🔋 Батарея", "kWh", 5, 300, 50, 5)
-    row_load, sl_load = slider_row("🏠 Жүктеме", "kW", 1, 50, 15, 1)
-    row_inv, sl_inv = slider_row("🔌 Инвертор", "kW", 5, 100, 40, 5)
+    row_panels, sl_panels = slider_row(t("lab_panels"), t("lab_unit_pcs"), 20, 400, 100, 10)
+    row_batt, sl_batt = slider_row(t("lab_battery"), "kWh", 5, 300, 50, 5)
+    row_load, sl_load = slider_row(t("lab_load"), "kW", 1, 50, 15, 1)
+    row_inv, sl_inv = slider_row(t("lab_inverter"), "kW", 5, 100, 40, 5)
 
     dd_weather = ft.Dropdown(
-        label="Ауа райы профилі",
+        label=t("lab_weather"),
         value="sample",
-        options=[ft.DropdownOption(key=k, text=v) for k, v in WEATHER_LABELS.items()],
+        options=[ft.DropdownOption(key=k, text=weather_label(k)) for k in WEATHER_KEYS],
         dense=True,
     )
 
@@ -70,12 +75,12 @@ def build_labs_view(page: ft.Page) -> ft.Control:
         )
         return card, value
 
-    card_pv, val_pv = kpi("PV өндірісі", c["accent"])
-    card_load, val_load = kpi("Тұтыну", c["text_primary"])
-    card_imp, val_imp = kpi("Желіден импорт", c["error"])
-    card_exp, val_exp = kpi("Желіге экспорт", c["secondary"])
-    card_sc, val_sc = kpi("PV өзіндік тұтыну", c["success"])
-    card_soc, val_soc = kpi("Соңғы SoC", c["primary"])
+    card_pv, val_pv = kpi(t("lab_kpi_pv"), c["accent"])
+    card_load, val_load = kpi(t("lab_kpi_load"), c["text_primary"])
+    card_imp, val_imp = kpi(t("lab_kpi_import"), c["error"])
+    card_exp, val_exp = kpi(t("lab_kpi_export"), c["secondary"])
+    card_sc, val_sc = kpi(t("lab_kpi_self"), c["success"])
+    card_soc, val_soc = kpi(t("lab_kpi_soc"), c["primary"])
 
     chart = ft.Row([], scroll=ft.ScrollMode.ALWAYS, spacing=6, vertical_alignment=ft.CrossAxisAlignment.END)
 
@@ -118,8 +123,8 @@ def build_labs_view(page: ft.Page) -> ft.Control:
         progress.visible = False
 
         if res is None:
-            reason = getattr(api_client_module, "last_http_error", "") or "себебі белгісіз"
-            txt_status.value, txt_status.visible = f"⚠️ Симуляция орындалмады. {reason}", True
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
+            txt_status.value, txt_status.visible = t("lab_err_failed", reason=reason), True
             page.update()
             return
 
@@ -133,15 +138,15 @@ def build_labs_view(page: ft.Page) -> ft.Control:
 
         requested = dd_weather.value or "sample"
         used = str(res.get("weather_source") or requested)
-        note = f"Ауа райы: {WEATHER_LABELS.get(used, used)}"
+        note = t("lab_weather_used", source=weather_label(used))
         if used != requested:
-            note += f" ({WEATHER_LABELS.get(requested, requested)} қолжетімсіз болды)"
+            note += " " + t("lab_weather_fallback", source=weather_label(requested))
         txt_weather_used.value = note
         render_chart(res.get("hours") or [])
         page.update()
 
     btn_run = ft.Button(
-        content=ft.Row([ft.Text("24 сағ симуляция"), progress], tight=True, spacing=8),
+        content=ft.Row([ft.Text(t("lab_btn_run")), progress], tight=True, spacing=8),
         icon=ft.Icons.PLAY_ARROW,
         style=ft.ButtonStyle(bgcolor=c["primary"], color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=12)),
         on_click=run,
@@ -150,7 +155,7 @@ def build_labs_view(page: ft.Page) -> ft.Control:
     params = ft.Container(
         content=ft.Column(
             [
-                ft.Row([ft.Icon(ft.Icons.SCIENCE, color=c["primary"]), ft.Text("Микрожелі параметрлері", weight=ft.FontWeight.BOLD)]),
+                ft.Row([ft.Icon(ft.Icons.SCIENCE, color=c["primary"]), ft.Text(t("lab_params"), weight=ft.FontWeight.BOLD)]),
                 row_panels, sl_panels,
                 row_batt, sl_batt,
                 row_load, sl_load,
@@ -171,13 +176,13 @@ def build_labs_view(page: ft.Page) -> ft.Control:
             [
                 ft.Row(
                     [
-                        ft.Text("⚡ Сағаттық қуат балансы (kW)", size=13, weight=ft.FontWeight.BOLD),
+                        ft.Text(t("lab_chart_title"), size=13, weight=ft.FontWeight.BOLD),
                         ft.Row(
                             [
                                 ft.Container(width=10, height=10, bgcolor=c["accent"], border_radius=5),
                                 ft.Text("PV", size=10, color=c["text_secondary"]),
                                 ft.Container(width=10, height=10, bgcolor=c["text_secondary"], border_radius=5),
-                                ft.Text("Жүктеме", size=10, color=c["text_secondary"]),
+                                ft.Text(t("lab_legend_load"), size=10, color=c["text_secondary"]),
                             ],
                             spacing=4,
                         ),
@@ -198,8 +203,8 @@ def build_labs_view(page: ft.Page) -> ft.Control:
 
     view = ft.ListView(
         controls=[
-            ft.Text("🧪 Микрожелі зертханасы", size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
-            ft.Text("PV + батарея + желі, 24 сағат · src/simulation (дашбордтағы зертханамен бірдей)", size=11, color=c["text_secondary"]),
+            ft.Text(t("lab_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("lab_subtitle"), size=11, color=c["text_secondary"]),
             params,
             txt_status,
             ft.Row([card_pv, card_load], spacing=8),

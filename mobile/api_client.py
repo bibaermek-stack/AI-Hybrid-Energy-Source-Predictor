@@ -268,21 +268,20 @@ class APIClient:
         # as model output.
         return res if isinstance(res, dict) else None
 
-    async def chat(self, prompt: str) -> str:
-        """Request POST /chat from RAG AI Assistant."""
+    async def chat(self, prompt: str) -> Optional[str]:
+        """
+        Advisor reply via POST /chat, or None if the request failed (reason in
+        last_http_error). It used to return a canned line in the advisor's
+        voice claiming "local mode" still worked — there is no local mode.
+        """
         url = f"{state.api_base_url}/chat"
         # ChatRequest is {query, lang}; sending {message, user_id} made every
-        # request fail validation with 422, so the advisor screen only ever
-        # showed the offline fallback below.
+        # request fail validation with 422.
         payload = {"query": prompt, "lang": state.lang}
-        res = await asyncio.to_thread(_http_post_sync, url, payload, 15.0)
-        if res and isinstance(res, dict):
-            return res.get("response") or res.get("reply") or "No response from assistant."
-
-        return (
-            "EcoPredict AI: Негізгі сервер уақытша офлайн. "
-            "Бірақ жергілікті режимде барлық есептеулер жұмыс істейді!"
-        )
+        res = await asyncio.to_thread(_http_post_sync, url, payload, 30.0)
+        if isinstance(res, dict):
+            return res.get("response") or res.get("reply") or ""
+        return None
 
     async def get_weather(self) -> Optional[Dict[str, Any]]:
         """Current Turkistan conditions (GET /solarman/weather)."""

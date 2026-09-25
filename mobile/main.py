@@ -1,5 +1,11 @@
 """
 EcoPredict AI Cross-Platform Mobile Application Shell.
+
+Navigation: five destinations (nav_bar.TABS) — a bottom bar on phones, a
+rail from RAIL_BREAKPOINT px. Secondary screens open from the "More" tab with
+a back arrow. Screens are built on first visit and cached; a language or
+theme change clears the cache so every screen is rebuilt in the new language
+and colours (they read state.colors / state.text when built).
 """
 
 import asyncio
@@ -18,11 +24,10 @@ try:
     from mobile.state import state
     from mobile.api_client import api_client
     from mobile.components.header import build_app_header
-    from mobile.components.nav_bar import build_bottom_nav
+    from mobile.components.nav_bar import RAIL_BREAKPOINT, TABS, build_bottom_nav, build_nav_rail
 
     from mobile.views.overview_view import build_overview_view
-    from mobile.views.predictions_view import build_predictions_view
-    from mobile.views.forecast_view import build_forecast_view
+    from mobile.views.forecast_hub_view import build_forecast_hub
     from mobile.views.faults_view import build_faults_view
     from mobile.views.training_view import build_training_view
     from mobile.views.learn_view import build_learn_view
@@ -32,15 +37,15 @@ try:
     from mobile.views.chat_view import build_chat_view
     from mobile.views.live_view import build_live_view
     from mobile.views.settings_view import build_settings_view
+    from mobile.views.more_view import MORE_ITEMS, TITLE_KEYS, build_more_view
 except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
     from components.header import build_app_header  # type: ignore # pyright: ignore[reportMissingImports]
-    from components.nav_bar import build_bottom_nav  # type: ignore # pyright: ignore[reportMissingImports]
+    from components.nav_bar import RAIL_BREAKPOINT, TABS, build_bottom_nav, build_nav_rail  # type: ignore # pyright: ignore[reportMissingImports]
 
     from views.overview_view import build_overview_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.predictions_view import build_predictions_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.forecast_view import build_forecast_view  # type: ignore # pyright: ignore[reportMissingImports]
+    from views.forecast_hub_view import build_forecast_hub  # type: ignore # pyright: ignore[reportMissingImports]
     from views.faults_view import build_faults_view  # type: ignore # pyright: ignore[reportMissingImports]
     from views.training_view import build_training_view  # type: ignore # pyright: ignore[reportMissingImports]
     from views.learn_view import build_learn_view  # type: ignore # pyright: ignore[reportMissingImports]
@@ -50,29 +55,67 @@ except (ImportError, ModuleNotFoundError):
     from views.chat_view import build_chat_view  # type: ignore # pyright: ignore[reportMissingImports]
     from views.live_view import build_live_view  # type: ignore # pyright: ignore[reportMissingImports]
     from views.settings_view import build_settings_view  # type: ignore # pyright: ignore[reportMissingImports]
+    from views.more_view import MORE_ITEMS, TITLE_KEYS, build_more_view  # type: ignore # pyright: ignore[reportMissingImports]
+
+
+TAB_KEYS = [key for key, *_ in TABS]
+MORE_KEYS = {key for key, *_ in MORE_ITEMS}
+PREF_LANG = "ecopredict.lang"
+PREF_THEME = "ecopredict.theme"
+DESKTOP_PLATFORMS = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
+
+
+def tab_index(screen: str) -> int:
+    """Bottom-bar slot a screen belongs to; secondary screens sit under More."""
+    if screen in TAB_KEYS:
+        return TAB_KEYS.index(screen)
+    return TAB_KEYS.index("more")
 
 
 async def main(page: ft.Page):
     """Main Flet mobile application entry point with Splash Screen."""
-    page.title = "EcoPredict AI Mobile - iPhone 16 Simulation"
+    page.title = "EcoPredict AI"
     page.padding = 0
     page.spacing = 0
 
-    # iPhone 16 Display Frame Simulation (393 x 852 px)
+    # iPhone 16 frame (393 x 852) for the desktop preview only; on a phone
+    # the OS owns the window.
+    if not page.web and page.platform in DESKTOP_PLATFORMS:
+        try:
+            page.window.width = 393
+            page.window.height = 852
+            page.window.min_width = 360
+            page.window.min_height = 700
+        except Exception:
+            pass
+
+    # ---- saved preferences (language, theme) ----------------------------
+    prefs = ft.SharedPreferences()
+    page.services.append(prefs)
+    page.update()
     try:
-        page.window.width = 393
-        page.window.height = 852
-        page.window.min_width = 360
-        page.window.min_height = 700
-    except Exception:
-        pass
+        saved_lang = await asyncio.wait_for(prefs.get(PREF_LANG), timeout=3)
+        saved_theme = await asyncio.wait_for(prefs.get(PREF_THEME), timeout=3)
+        if saved_lang in ("kk", "en"):
+            state.lang = saved_lang
+        if saved_theme in ("dark", "light"):
+            state.theme_mode = saved_theme
+    except Exception as err:  # first launch, or storage unavailable
+        print(f"Preferences not loaded: {err}")
 
-    # Dynamic theme mode
+    async def save_prefs():
+        try:
+            await prefs.set(PREF_LANG, state.lang)
+            await prefs.set(PREF_THEME, state.theme_mode)
+        except Exception as err:
+            print(f"Preferences not saved: {err}")
+
     page.theme_mode = ft.ThemeMode.DARK if state.dark_mode else ft.ThemeMode.LIGHT
+    t = state.text
 
-    # Dynamic Splash Loading Controls
+    # ---- splash ----------------------------------------------------------
     txt_loading_status = ft.Text(
-        "AI модельдері дайындалуда...",
+        t("splash_preparing"),
         size=12,
         weight=ft.FontWeight.W_500,
         color=ft.Colors.with_opacity(0.7, ft.Colors.WHITE),
@@ -84,8 +127,6 @@ async def main(page: ft.Page):
         bgcolor=ft.Colors.with_opacity(0.15, ft.Colors.WHITE),
         border_radius=6,
     )
-
-    # 1. Fullscreen Splash Loading Page
     splash_screen = ft.Container(
         content=ft.Column(
             [
@@ -97,14 +138,9 @@ async def main(page: ft.Page):
                     border=ft.Border.all(1, ft.Colors.with_opacity(0.3, "#3B82F6")),
                 ),
                 ft.Container(height=20),
+                ft.Text("EcoPredict AI", size=30, weight=ft.FontWeight.BOLD, color="#FFFFFF"),
                 ft.Text(
-                    "EcoPredict AI",
-                    size=30,
-                    weight=ft.FontWeight.BOLD,
-                    color="#FFFFFF",
-                ),
-                ft.Text(
-                    "Гибридті ЖЭК үшін ақылды білім беру платформасы",
+                    t("app_subtitle"),
                     size=12,
                     color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE),
                     text_align=ft.TextAlign.CENTER,
@@ -126,63 +162,150 @@ async def main(page: ft.Page):
         ),
     )
 
-    view_container = ft.Container(
-        content=splash_screen,
-        expand=True,
-    )
-
-    # Render Loading Page instantly on startup
+    view_container = ft.Container(content=splash_screen, expand=True)
     page.add(view_container)
     page.update()
 
-    # Refresh UI helper
-    def refresh_ui():
-        page.theme_mode = ft.ThemeMode.DARK if state.dark_mode else ft.ThemeMode.LIGHT
-        page.appbar = build_app_header(page, refresh_ui)
-        page.update()
+    # ---- screens ---------------------------------------------------------
+    nav = {"screen": "overview", "wide": None}
+    cache: dict = {}
+    hub_select: dict = {}
 
-    view_keys = ["overview", "predictions", "forecast", "faults", "training", "opt", "sustainability", "labs", "chat", "live", "settings"]
+    def build_hub():
+        control, select = build_forecast_hub(page)
+        hub_select["fn"] = select
+        return control
 
-    def on_nav_change(view_key: str):
-        if view_key in views:
-            state.active_tab = view_key
-            target = views[view_key]
-            view_container.content = target
-            if view_key in view_keys and page.navigation_bar:
-                page.navigation_bar.selected_index = view_keys.index(view_key)
-            page.update()
-            # Views are built once and cached, so a screen showing live figures
-            # would otherwise keep whatever it loaded at startup. A view opts in
-            # by leaving an async reload callable in .data.
-            reload_fn = getattr(target, "data", None)
-            if callable(reload_fn):
-                async def _run_task_wrapper():
-                    res = reload_fn()
-                    if asyncio.iscoroutine(res):
-                        await res
-                page.run_task(_run_task_wrapper)
-
-    # Views Registry
-    views = {
-        "overview": build_overview_view(page, on_nav_change),
-        "predictions": build_predictions_view(page),
-        "forecast": build_forecast_view(page),
-        "faults": build_faults_view(page),
-        "training": build_training_view(page),
-        "learn": build_learn_view(page),
-        "opt": build_optimization_view(page),
-        "sustainability": build_sustainability_view(page),
-        "labs": build_labs_view(page),
-        "chat": build_chat_view(page),
-        "live": build_live_view(page),
-        "settings": build_settings_view(page, refresh_ui),
+    builders = {
+        "overview": lambda: build_overview_view(page, navigate),
+        "forecast": build_hub,
+        "live": lambda: build_live_view(page),
+        "chat": lambda: build_chat_view(page),
+        "more": lambda: build_more_view(page, navigate),
+        "faults": lambda: build_faults_view(page),
+        "opt": lambda: build_optimization_view(page),
+        "sustainability": lambda: build_sustainability_view(page),
+        "labs": lambda: build_labs_view(page),
+        "training": lambda: build_training_view(page),
+        "learn": lambda: build_learn_view(page),
+        "settings": lambda: build_settings_view(page, refresh_chrome),
     }
 
-    # Dynamic Step-by-Step Loading Animation
+    def get_view(key: str) -> ft.Control:
+        if key not in cache:
+            cache[key] = builders[key]()
+        return cache[key]
+
+    def run_reload(view: ft.Control) -> None:
+        # Views are cached, so a screen showing live figures would otherwise
+        # keep whatever it loaded first. A view opts in by leaving a reload
+        # callable (sync or async) in .data.
+        reload_fn = getattr(view, "data", None)
+        if not callable(reload_fn):
+            return
+
+        async def _run():
+            res = reload_fn()
+            if asyncio.iscoroutine(res):
+                await res
+
+        page.run_task(_run)
+
+    # ---- chrome: app bar + navigation ----------------------------------
+    def build_header() -> ft.AppBar:
+        screen = nav["screen"]
+
+        def on_recheck() -> None:
+            page.run_task(recheck)
+
+        if screen in MORE_KEYS:
+            return build_app_header(page, on_recheck, on_back=lambda: show("more"), title=t(TITLE_KEYS[screen]))
+        return build_app_header(page, on_recheck)
+
+    def on_tab_change(e) -> None:
+        index = e.control.selected_index or 0
+        show(TAB_KEYS[index] if index < len(TAB_KEYS) else "overview")
+
+    def apply_layout() -> None:
+        """Bottom bar on phones, rail on wide screens; rebuilds nav labels too."""
+        wide = (page.width or 0) >= RAIL_BREAKPOINT
+        nav["wide"] = wide
+        index = tab_index(nav["screen"])
+        page.controls.clear()
+        if wide:
+            page.navigation_bar = None
+            page.controls.append(
+                ft.Row(
+                    [build_nav_rail(index, on_tab_change), ft.VerticalDivider(width=1), view_container],
+                    expand=True,
+                    spacing=0,
+                )
+            )
+        else:
+            page.navigation_bar = build_bottom_nav(index, on_tab_change)
+            page.controls.append(view_container)
+
+    def refresh_chrome() -> None:
+        """Redraw the app bar (status pill) without touching the screens."""
+        page.appbar = build_header()
+        page.update()
+
+    def show(key: str, segment: str = "", reload: bool = True) -> None:
+        if key not in builders:
+            key = "overview"
+        nav["screen"] = key
+        state.active_tab = key
+        if key == "forecast" and segment:
+            state.forecast_segment = segment
+        view = get_view(key)
+        if key == "forecast" and segment and "fn" in hub_select:
+            hub_select["fn"](segment)
+        view_container.content = view
+
+        index = tab_index(key)
+        if page.navigation_bar is not None:
+            page.navigation_bar.selected_index = index
+        for control in page.controls:
+            if isinstance(control, ft.Row) and control.controls and isinstance(control.controls[0], ft.NavigationRail):
+                control.controls[0].selected_index = index
+        page.appbar = build_header()
+        page.update()
+        if reload:
+            run_reload(view)
+
+    def navigate(target: str) -> None:
+        """Screen key, optionally "forecast:ml" / "forecast:24h"."""
+        key, _, segment = target.partition(":")
+        show(key, segment)
+
+    def on_state_changed() -> None:
+        """Language or theme changed: rebuild every screen, then persist."""
+        page.theme_mode = ft.ThemeMode.DARK if state.dark_mode else ft.ThemeMode.LIGHT
+        cache.clear()
+        hub_select.clear()
+        apply_layout()
+        show(nav["screen"])
+        page.run_task(save_prefs)
+
+    state.subscribe(on_state_changed)
+
+    def on_resize(e) -> None:
+        wide = (page.width or 0) >= RAIL_BREAKPOINT
+        if wide != nav["wide"]:
+            apply_layout()
+            page.update()
+
+    page.on_resize = on_resize
+
+    async def recheck() -> None:
+        await api_client.check_health()
+        refresh_chrome()
+
+    # ---- start-up --------------------------------------------------------
     health_task = asyncio.create_task(api_client.check_health())
 
     progress_bar.value = 0.60
-    txt_loading_status.value = "Solar & Wind ML модельдері жүктелуде..."
+    txt_loading_status.value = t("splash_loading_models")
     page.update()
 
     try:
@@ -191,28 +314,25 @@ async def main(page: ft.Page):
         # "offline" whenever the container took more than 2s to wake up.
         await asyncio.wait_for(asyncio.shield(health_task), timeout=2.0)
     except Exception:
-        pass  # still running; it updates the header when it lands
+        pass  # still running; watch_health updates the header when it lands
 
     progress_bar.value = 1.0
-    txt_loading_status.value = "Жүйе сәтті іске қосылды! 🚀"
+    txt_loading_status.value = t("splash_ready")
     page.update()
     await asyncio.sleep(0.1)
 
-    # Transition from Loading Page to Main Dashboard
-    view_container.content = views["overview"]
-    view_container.padding = 12
-    page.appbar = build_app_header(page, refresh_ui)
-    page.navigation_bar = build_bottom_nav(0, lambda e: on_nav_change(view_keys[e.control.selected_index] if e.control.selected_index < len(view_keys) else "overview"))
-    page.update()
+    # Transition from the splash to the dashboard.
+    apply_layout()
+    show("overview")
 
-    # Only now that the dashboard is mounted is it safe to fetch live figures.
-    overview_reload = getattr(views["overview"], "data", None)
-    if callable(overview_reload):
-        async def _run_overview_reload():
-            res = overview_reload()
-            if asyncio.iscoroutine(res):
-                await res
-        page.run_task(_run_overview_reload)
+    async def watch_health() -> None:
+        # The header is drawn once; without this a check that finished after
+        # the 2 s splash window left it saying "offline" until the next rebuild.
+        await health_task
+        refresh_chrome()
+
+    if not health_task.done():
+        page.run_task(watch_health)
 
 
 if __name__ == "__main__":

@@ -64,18 +64,21 @@ class TestMobileScreensBuild(unittest.TestCase):
         )
 
     def test_every_screen_builds_without_deprecations(self):
+        """Every screen, in both languages and both themes."""
+        import mobile.state as state_module
         from mobile.components.header import build_app_header
-        from mobile.components.nav_bar import build_bottom_nav
+        from mobile.components.nav_bar import build_bottom_nav, build_nav_rail
+        from mobile.state import state
         from mobile.views import (
             chat_view,
             faults_view,
-            forecast_view,
+            forecast_hub_view,
             labs_view,
             learn_view,
             live_view,
+            more_view,
             optimization_view,
             overview_view,
-            predictions_view,
             settings_view,
             sustainability_view,
             training_view,
@@ -84,8 +87,7 @@ class TestMobileScreensBuild(unittest.TestCase):
         page = FakePage()
         builders = {
             "overview": lambda: overview_view.build_overview_view(page, lambda key: None),
-            "predictions": lambda: predictions_view.build_predictions_view(page),
-            "forecast": lambda: forecast_view.build_forecast_view(page),
+            "forecast_hub": lambda: forecast_hub_view.build_forecast_hub(page)[0],
             "faults": lambda: faults_view.build_faults_view(page),
             "training": lambda: training_view.build_training_view(page),
             "learn": lambda: learn_view.build_learn_view(page),
@@ -95,22 +97,45 @@ class TestMobileScreensBuild(unittest.TestCase):
             "chat": lambda: chat_view.build_chat_view(page),
             "live": lambda: live_view.build_live_view(page),
             "settings": lambda: settings_view.build_settings_view(page, lambda: None),
+            "more": lambda: more_view.build_more_view(page, lambda key: None),
             "header": lambda: build_app_header(page, lambda: None),
+            "header_back": lambda: build_app_header(page, lambda: None, on_back=lambda: None, title="x"),
             "nav": lambda: build_bottom_nav(0, lambda e: None),
+            "rail": lambda: build_nav_rail(0, lambda e: None),
         }
 
-        for name, build in builders.items():
-            with self.subTest(screen=name):
-                with warnings.catch_warnings(record=True) as caught:
-                    warnings.simplefilter("always")
-                    control = build()
-                self.assertIsNotNone(control)
-                # A deprecation today is a removal in the next flet release.
-                deprecations = sorted(
-                    {str(w.message) for w in caught if "deprecat" in str(w.message).lower()}
-                )
-                self.assertEqual(deprecations, [], f"{name} uses deprecated flet API")
+        # Record lookups of keys missing from mobile/i18n.py while building.
+        missing_keys = set()
+        real_get_text = state_module.get_text
 
+        def recording_get_text(lang, key, default="", **fmt):
+            if key not in state_module_strings:
+                missing_keys.add(key)
+            return real_get_text(lang, key, default, **fmt)
+
+        from mobile.i18n import STRINGS as state_module_strings
+
+        saved = (state.lang, state.theme_mode)
+        state_module.get_text = recording_get_text
+        try:
+            for lang in ("kk", "en"):
+                for theme in ("dark", "light"):
+                    state.lang, state.theme_mode = lang, theme
+                    for name, build in builders.items():
+                        with self.subTest(screen=name, lang=lang, theme=theme):
+                            with warnings.catch_warnings(record=True) as caught:
+                                warnings.simplefilter("always")
+                                control = build()
+                            self.assertIsNotNone(control)
+                            # A deprecation today is a removal in the next flet release.
+                            deprecations = sorted(
+                                {str(w.message) for w in caught if "deprecat" in str(w.message).lower()}
+                            )
+                            self.assertEqual(deprecations, [], f"{name} uses deprecated flet API")
+        finally:
+            state_module.get_text = real_get_text
+            state.lang, state.theme_mode = saved
+        self.assertEqual(sorted(missing_keys), [], "keys missing from mobile/i18n.py")
 
 if __name__ == "__main__":
     unittest.main()

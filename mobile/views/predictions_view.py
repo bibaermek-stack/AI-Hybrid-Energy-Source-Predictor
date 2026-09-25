@@ -12,6 +12,7 @@ except (ImportError, ModuleNotFoundError):
 def build_predictions_view(page: ft.Page) -> ft.Control:
     """Build interactive ML predictions view with power curve visualization."""
     c = state.colors
+    t = state.text
 
     # Labels
     txt_irrad = ft.Text(f"{state.irradiation:.0f} W/m²", size=11, weight=ft.FontWeight.BOLD, color=c["primary"])
@@ -24,7 +25,7 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
     txt_solar = ft.Text("—", size=20, weight=ft.FontWeight.BOLD, color=c["accent"])
     txt_wind = ft.Text("—", size=20, weight=ft.FontWeight.BOLD, color=c["secondary"])
     txt_total = ft.Text("—", size=24, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_rec = ft.Text("💡 Ұсыныс: —", size=12, weight=ft.FontWeight.W_600, color=c["text_primary"])
+    txt_rec = ft.Text(t("pred_recommendation", source="—"), size=12, weight=ft.FontWeight.W_600, color=c["text_primary"])
     progress_ring = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2, color="#FFFFFF")
 
     # Sliders
@@ -62,9 +63,9 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
 
         progress_ring.visible = False
         if res is None:
-            reason = getattr(api_client_module, "last_http_error", "") or "себебі белгісіз"
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
             txt_solar.value = txt_wind.value = txt_total.value = "—"
-            txt_rec.value = f"⚠️ Модель жауап бермеді. {reason}"
+            txt_rec.value = t("pred_err_no_answer", reason=reason)
             txt_rec.color = c["error"]
             bar_solar.width = bar_wind.width = 0
             page.update()
@@ -78,7 +79,7 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
         txt_solar.value = f"{s_val:.1f} kW"
         txt_wind.value = f"{w_val:.1f} kW"
         txt_total.value = f"{t_val:.1f} kW"
-        txt_rec.value = f"💡 Ұсыныс: {res.get('recommended_source', '—')}"
+        txt_rec.value = t("pred_recommendation", source=res.get("recommended_source", "—"))
         txt_rec.color = c["text_primary"]
 
         # Update bar widths proportionally
@@ -89,7 +90,7 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
 
     btn_calc = ft.Button(
         content=ft.Row(
-            [ft.Icon(ft.Icons.AUTO_AWESOME, color="#FFFFFF"), ft.Text("ML Болжам жасау", color="#FFFFFF", weight=ft.FontWeight.BOLD), progress_ring],
+            [ft.Icon(ft.Icons.AUTO_AWESOME, color="#FFFFFF"), ft.Text(t("pred_btn"), color="#FFFFFF", weight=ft.FontWeight.BOLD), progress_ring],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=8,
         ),
@@ -99,16 +100,16 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
 
     view = ft.ListView(
         controls=[
-            ft.Text("⚡ ML Энергия Болжау Сервисі", size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("pred_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Row([ft.Icon(ft.Icons.WB_SUNNY, color=c["accent"]), ft.Text("Күн Батареясы Тізімі", weight=ft.FontWeight.BOLD)]),
-                        ft.Row([ft.Text("Радиация:"), txt_irrad], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Icon(ft.Icons.WB_SUNNY, color=c["accent"]), ft.Text(t("pred_solar_section"), weight=ft.FontWeight.BOLD)]),
+                        ft.Row([ft.Text(t("pred_irradiance")), txt_irrad], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_irrad,
-                        ft.Row([ft.Text("Ауа темп.:"), txt_temp], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_ambient")), txt_temp], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_temp,
-                        ft.Row([ft.Text("Панель темп.:"), txt_module], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_module")), txt_module], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_module,
                     ],
                     spacing=4,
@@ -121,8 +122,8 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Row([ft.Icon(ft.Icons.AIR, color=c["secondary"]), ft.Text("Жел Генераторы", weight=ft.FontWeight.BOLD)]),
-                        ft.Row([ft.Text("Жел жылдамдығы:"), txt_wind_spd], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Icon(ft.Icons.AIR, color=c["secondary"]), ft.Text(t("pred_wind_section"), weight=ft.FontWeight.BOLD)]),
+                        ft.Row([ft.Text(t("pred_wind_speed")), txt_wind_spd], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_wind_spd,
                     ],
                     spacing=4,
@@ -137,12 +138,12 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
                 content=ft.Column(
                     [
                         # Instantaneous kW for the inputs above, not a daily total.
-                        ft.Text("Болжалған лездік қуат (Күн + Жел):", size=12, color=c["text_secondary"]),
+                        ft.Text(t("pred_total_label"), size=12, color=c["text_secondary"]),
                         txt_total,
                         ft.Divider(height=1, color=c["card_border"]),
-                        ft.Row([ft.Text("☀️ Күн қуаты:"), txt_solar], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_solar_power")), txt_solar], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         bar_solar,
-                        ft.Row([ft.Text("💨 Жел қуаты:"), txt_wind], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_wind_power")), txt_wind], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         bar_wind,
                         ft.Container(height=4),
                         txt_rec,

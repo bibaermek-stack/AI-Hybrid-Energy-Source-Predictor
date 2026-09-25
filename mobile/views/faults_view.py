@@ -19,31 +19,39 @@ except (ImportError, ModuleNotFoundError):
     import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
 
 # Advice per class the model was trained on: Clean, Dust, Bird, Electrical,
-# Physical, Snow.
+# Physical, Snow — (i18n key, colour tone).
 RECOMMENDATIONS = {
-    "Clean": ("Панель таза. Әрекет қажет емес.", "success"),
-    "Dust": ("Шаң басқан. Жуу жоспарлаңыз — өнімділік 10-25% төмендейді.", "warning"),
-    "Snow": ("Қар жабыны. Тазартылмайынша өндіріс іс жүзінде нөлге тең.", "warning"),
-    "Bird": ("Құс саңғырығы. Жергілікті қызып кету қаупі, тезірек тазалаңыз.", "warning"),
-    "Electrical": ("Электрлік ақау белгісі. Инвертор мен қосылымдарды тексеріңіз.", "error"),
-    "Physical": ("Физикалық зақым (жарық/сынық). Панельді ауыстыру қажет.", "error"),
+    "Clean": ("fl_rec_clean", "success"),
+    "Dust": ("fl_rec_dust", "warning"),
+    "Snow": ("fl_rec_snow", "warning"),
+    "Bird": ("fl_rec_bird", "warning"),
+    "Electrical": ("fl_rec_electrical", "error"),
+    "Physical": ("fl_rec_physical", "error"),
 }
+
+# POST /detect rejects anything larger (api/routes.py MAX_UPLOAD_BYTES).
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+# Re-encode picked photos on the device: a phone camera JPEG is often 4–12 MB,
+# which is slow over mobile data and can exceed the server limit. YOLO runs at
+# 640 px, so this costs the model nothing.
+PICK_COMPRESSION_QUALITY = 80
 
 
 def build_faults_view(page: ft.Page) -> ft.Control:
     """Solar fault detection screen backed by the real YOLO endpoint."""
     c = state.colors
+    t = state.text
 
-    txt_class = ft.Text("Тексеруді күтуде", size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"])
+    txt_class = ft.Text(t("fl_waiting"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"])
     txt_conf = ft.Text("—", size=14, color=c["primary"])
-    txt_rec = ft.Text("Панель суретін таңдаңыз — YOLO моделі диагноз қояды.", size=12, color=c["text_secondary"])
+    txt_rec = ft.Text(t("fl_hint"), size=12, color=c["text_secondary"])
     txt_all = ft.Text("", size=11, color=c["text_secondary"], visible=False)
 
     img_preview = ft.Image(src="", visible=False, width=280, height=160, fit=ft.BoxFit.CONTAIN, border_radius=14)
     placeholder = ft.Column(
         [
             ft.Icon(ft.Icons.SOLAR_POWER, size=56, color=c["primary"]),
-            ft.Text("YOLO11 AI Панель Сканері", size=12, color=c["text_secondary"]),
+            ft.Text(t("fl_scanner"), size=12, color=c["text_secondary"]),
         ],
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
         alignment=ft.MainAxisAlignment.CENTER,
@@ -69,10 +77,10 @@ def build_faults_view(page: ft.Page) -> ft.Control:
 
     async def run_detection(content: bytes, filename: str) -> None:
         progress_bar.visible = True
-        txt_class.value = "Талдау жүріп жатыр…"
+        txt_class.value = t("fl_analyzing")
         txt_class.color = c["text_primary"]
         txt_conf.value = "—"
-        txt_rec.value = f"{filename} серверге жіберілді"
+        txt_rec.value = t("fl_sent", filename=filename)
         txt_all.visible = False
         page.update()
 
@@ -81,49 +89,45 @@ def build_faults_view(page: ft.Page) -> ft.Control:
 
         if result is None:
             # Read through the module: last_http_error is rebound on each failure.
-            reason = getattr(api_client_module, "last_http_error", "") or "себебі белгісіз"
-            show("Диагноз орындалмады", "—", f"Сервер жауап бермеді. {reason}", c["error"])
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
+            show(t("fl_failed"), "—", t("fl_err_server", reason=reason), c["error"])
             return
 
         primary = result.get("primary")
         if not primary:
-            show(
-                "Ақау табылмады",
-                "Модель ешнәрсе анықтамады",
-                "Суретте таныған нысан жоқ. Панель толық түскен, анығырақ сурет жіберіп көріңіз.",
-                c["text_secondary"],
-            )
+            show(t("fl_none_found"), t("fl_none_conf"), t("fl_none_advice"), c["text_secondary"])
             return
 
         cls = str(primary.get("class_name", "?"))
         conf = float(primary.get("confidence", 0.0)) * 100
-        advice, tone = RECOMMENDATIONS.get(cls, ("Белгісіз класс — қолмен тексеріңіз.", "warning"))
-        show(f"Анықталды: {cls}", f"Сенімділік: {conf:.1f}%", advice, c[tone])
+        advice_key, tone = RECOMMENDATIONS.get(cls, ("fl_rec_unknown", "warning"))
+        show(t("fl_detected", cls=cls), t("fl_confidence", pct=conf), t(advice_key), c[tone])
 
         others = result.get("detections") or []
         if len(others) > 1:
-            txt_all.value = "Қосымша: " + ", ".join(
+            txt_all.value = t("fl_also") + ", ".join(
                 f"{d['class_name']} {float(d['confidence']) * 100:.0f}%" for d in others[1:5]
             )
             txt_all.visible = True
         page.update()
 
     file_picker = ft.FilePicker()
-    # FilePicker subclasses Service, not Control, in flet 0.86. Putting it in
+    # FilePicker subclasses Service, not Control, in flet 0.86+. Putting it in
     # page.overlay made Flutter render a full-height red "Unknown control:
     # FilePicker" banner over every screen.
     page.services.append(file_picker)
 
     async def on_upload_click(e) -> None:
-        # flet 0.86: pick_files is awaitable and returns the files directly;
-        # with_data gives the bytes without touching the filesystem, which
-        # matters on Android where the picked path is often not readable.
+        # pick_files is awaitable and returns the files directly; with_data gives
+        # the bytes without touching the filesystem, which matters on Android
+        # where the picked path is often not readable.
         files = await file_picker.pick_files(
-            dialog_title="Панель суретін таңдаңыз",
+            dialog_title=t("fl_pick_title"),
             allow_multiple=False,
             file_type=ft.FilePickerFileType.IMAGE,
             allowed_extensions=["jpg", "jpeg", "png", "webp", "bmp"],
             with_data=True,
+            compression_quality=PICK_COMPRESSION_QUALITY,
         )
         if not files:
             return
@@ -135,21 +139,29 @@ def build_faults_view(page: ft.Page) -> ft.Control:
                 with open(picked.path, "rb") as fh:
                     content = fh.read()
             except Exception as err:
-                show("Файл оқылмады", "—", str(err), c["error"])
+                show(t("fl_read_failed"), "—", str(err), c["error"])
                 return
         if not content:
-            show("Файл оқылмады", "—", "Сурет мазмұны алынбады.", c["error"])
+            show(t("fl_read_failed"), "—", t("fl_read_empty"), c["error"])
+            return
+        if len(content) > MAX_UPLOAD_BYTES:
+            # Say so here rather than uploading megabytes to get a 413 back.
+            show(
+                t("fl_too_large"),
+                "—",
+                t("fl_too_large_advice", mb=len(content) / 1024 / 1024, limit=MAX_UPLOAD_BYTES // 1024 // 1024),
+                c["error"],
+            )
             return
 
-        # flet 0.86 Image.src takes str | bytes, so the picked image renders
-        # straight from memory.
+        # Image.src takes str | bytes, so the picked image renders from memory.
         img_preview.src = content
         img_preview.visible = True
         preview_box.content = img_preview
         await run_detection(content, picked.name or "panel.jpg")
 
     btn_upload = ft.Button(
-        content=ft.Text(state.text("fl_btn_upload")),
+        content=ft.Text(t("fl_btn_upload")),
         icon=ft.Icons.UPLOAD_FILE,
         style=ft.ButtonStyle(
             bgcolor=c["primary"],
@@ -169,8 +181,8 @@ def build_faults_view(page: ft.Page) -> ft.Control:
 
     return ft.ListView(
         controls=[
-            ft.Text("🔍 " + state.text("fl_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
-            ft.Text(state.text("fl_desc"), size=12, color=c["text_secondary"]),
+            ft.Text("🔍 " + t("fl_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("fl_desc"), size=12, color=c["text_secondary"]),
             btn_upload,
             progress_bar,
             ft.Container(content=preview_box, alignment=ft.Alignment.CENTER, padding=10, bgcolor=c["surface"], border_radius=14, border=ft.Border.all(1, c["card_border"])),

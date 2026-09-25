@@ -22,26 +22,27 @@ except (ImportError, ModuleNotFoundError):
 def build_optimization_view(page: ft.Page) -> ft.Control:
     """Build microgrid optimization & battery dispatch solver view."""
     c = state.colors
+    t = state.text
 
     # Inputs
-    tf_load = ft.TextField(label=state.text("opt_load"), value=str(state.load_kw), keyboard_type=ft.KeyboardType.NUMBER)
-    tf_battery = ft.TextField(label=state.text("opt_battery_cap"), value=str(state.battery_kw), keyboard_type=ft.KeyboardType.NUMBER)
-    tf_solar_cost = ft.TextField(label=state.text("opt_solar_cost"), value=str(state.solar_cost), keyboard_type=ft.KeyboardType.NUMBER)
-    tf_wind_cost = ft.TextField(label=state.text("opt_wind_cost"), value=str(state.wind_cost), keyboard_type=ft.KeyboardType.NUMBER)
+    tf_load = ft.TextField(label=t("opt_load"), value=str(state.load_kw), keyboard_type=ft.KeyboardType.NUMBER)
+    tf_battery = ft.TextField(label=t("opt_battery_cap"), value=str(state.battery_kw), keyboard_type=ft.KeyboardType.NUMBER)
+    tf_solar_cost = ft.TextField(label=t("opt_solar_cost"), value=str(state.solar_cost), keyboard_type=ft.KeyboardType.NUMBER)
+    tf_wind_cost = ft.TextField(label=t("opt_wind_cost"), value=str(state.wind_cost), keyboard_type=ft.KeyboardType.NUMBER)
 
     dd_strategy = ft.Dropdown(
-        label=state.text("opt_strategy"),
+        label=t("opt_strategy"),
         value=state.strategy,
         options=[
-            ft.dropdown.Option("hybrid", "Hybrid Smart Dispatch (Оңтайлы гибрид)"),
-            ft.dropdown.Option("min_cost", "Minimize Operational Cost (Минималды шығын)"),
-            ft.dropdown.Option("max_power", "Maximize Renewable Output (Максималды ЖЭК)"),
-            ft.dropdown.Option("balanced", "Balanced Battery/Grid (Балансталған)"),
+            ft.dropdown.Option("hybrid", t("opt_strategy_hybrid")),
+            ft.dropdown.Option("min_cost", t("opt_strategy_min_cost")),
+            ft.dropdown.Option("max_power", t("opt_strategy_max_power")),
+            ft.dropdown.Option("balanced", t("opt_strategy_balanced")),
         ],
     )
 
     txt_status = ft.Text("", size=12, color=c["error"], visible=False, selectable=True)
-    txt_rec_source = ft.Text("⚡ Оңтайлы көз: —", size=15, weight=ft.FontWeight.BOLD, color=c["primary"])
+    txt_rec_source = ft.Text(t("opt_recommended", source="—"), size=15, weight=ft.FontWeight.BOLD, color=c["primary"])
     txt_scenario = ft.Text("", size=11, color=c["text_secondary"])
     progress_ring = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2)
 
@@ -49,13 +50,13 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
         value = ft.Text("—", size=14, weight=ft.FontWeight.W_600, color=color)
         return ft.Row([ft.Text(label, size=13), value], alignment=ft.MainAxisAlignment.SPACE_BETWEEN), value
 
-    row_solar, txt_solar = value_row("☀️ Күн (пайдаланылды / қолжетімді)", c["accent"])
-    row_wind, txt_wind = value_row("💨 Жел (пайдаланылды / қолжетімді)", c["secondary"])
-    row_batt, txt_batt = value_row("🔋 Батареядан разряд", c["success"])
-    row_short, txt_short = value_row("🔌 Желіден алынады (жетіспеушілік)", c["error"])
-    row_curt, txt_curt = value_row("✂️ Артық өндіріс (curtailment)", c["text_secondary"])
-    row_rel, txt_rel = value_row("✅ Жүктемені жабу (reliability)", c["primary"])
-    row_cost, txt_cost = value_row("💲 Салыстырмалы құн", c["text_secondary"])
+    row_solar, txt_solar = value_row(t("opt_row_solar"), c["accent"])
+    row_wind, txt_wind = value_row(t("opt_row_wind"), c["secondary"])
+    row_batt, txt_batt = value_row(t("opt_row_battery"), c["success"])
+    row_short, txt_short = value_row(t("opt_row_shortfall"), c["error"])
+    row_curt, txt_curt = value_row(t("opt_row_curtailment"), c["text_secondary"])
+    row_rel, txt_rel = value_row(t("opt_row_reliability"), c["primary"])
+    row_cost, txt_cost = value_row(t("opt_row_cost"), c["text_secondary"])
 
     def _num(x) -> float:
         try:
@@ -71,7 +72,7 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
             state.solar_cost = float(tf_solar_cost.value or 0.08)
             state.wind_cost = float(tf_wind_cost.value or 0.06)
         except ValueError:
-            return "Сандарды дұрыс енгізіңіз (мысалы 450 немесе 0.08)."
+            return t("opt_err_numbers")
         state.strategy = dd_strategy.value or "hybrid"
         return ""
 
@@ -105,19 +106,18 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
         progress_ring.visible = False
 
         if res is None:
-            reason = getattr(api_client_module, "last_http_error", "") or "себебі белгісіз"
-            txt_status.value = f"⚠️ Диспетчер есептелмеді. {reason}"
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
+            txt_status.value = t("opt_err_failed", reason=reason)
             txt_status.visible = True
-            txt_rec_source.value = "⚡ Оңтайлы көз: —"
+            txt_rec_source.value = t("opt_recommended", source="—")
             for t in (txt_solar, txt_wind, txt_batt, txt_short, txt_curt, txt_rel, txt_cost):
                 t.value = "—"
             page.update()
             return
 
-        txt_rec_source.value = f"⚡ Оңтайлы көз: {res.get('recommended_source', '—')}"
-        txt_scenario.value = (
-            f"Кіріс: {state.irradiation:.0f} W/m², жел {state.wind_speed:.1f} m/s "
-            f"(«ML Болжам» экранындағы мәндер) · жүктеме {state.load_kw:.0f} kW"
+        txt_rec_source.value = t("opt_recommended", source=res.get("recommended_source", "—"))
+        txt_scenario.value = t(
+            "opt_scenario", irr=state.irradiation, wind=state.wind_speed, load=state.load_kw
         )
         txt_solar.value = f"{_num(res.get('solar_used')):.1f} / {_num(res.get('solar_power')):.1f} kW"
         txt_wind.value = f"{_num(res.get('wind_used')):.1f} / {_num(res.get('wind_power')):.1f} kW"
@@ -130,7 +130,7 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
         page.update()
 
     btn_opt = ft.Button(
-        content=ft.Row([ft.Text(state.text("opt_btn")), progress_ring], tight=True, spacing=8),
+        content=ft.Row([ft.Text(t("opt_btn")), progress_ring], tight=True, spacing=8),
         icon=ft.Icons.TUNE,
         style=ft.ButtonStyle(
             bgcolor=c["primary"],
@@ -165,7 +165,7 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
 
     view = ft.ListView(
         controls=[
-            ft.Text("⚙ " + state.text("opt_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text("⚙ " + t("opt_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             tf_load,
             tf_battery,
             ft.Row([ft.Container(tf_solar_cost, expand=True), ft.Container(tf_wind_cost, expand=True)], spacing=10),

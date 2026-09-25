@@ -14,14 +14,17 @@ import flet as ft
 try:
     from mobile.state import state
     from mobile.api_client import api_client
+    from mobile import api_client as api_client_module
 except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
+    import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
 
 
 def build_forecast_view(page: ft.Page) -> ft.Control:
     """24-hour solar generation forecast: peak summary, hourly bars, hourly table."""
     c = state.colors
+    t = state.text
 
     ref_peak = ft.Ref[ft.Text]()
     ref_peak_at = ft.Ref[ft.Text]()
@@ -40,7 +43,7 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
                         ft.Text(title, size=12, color=c["text_secondary"]),
                     ]),
                     ft.Text("—", size=18, weight=ft.FontWeight.BOLD, color=c["text_primary"], ref=value_ref),
-                    ft.Text("Жүктелуде…", size=11, color=accent, ref=sub_ref),
+                    ft.Text(t("loading"), size=11, color=accent, ref=sub_ref),
                 ],
                 spacing=4,
             ),
@@ -51,19 +54,19 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
             expand=True,
         )
 
-    card_peak = summary_card("Күн Пик Қуаты", ft.Icons.WB_SUNNY, "#F59E0B", ref_peak, ref_peak_at)
-    card_total = summary_card("Тәуліктік Өндіріс", ft.Icons.BATTERY_CHARGING_FULL, "#10B981", ref_total, ref_total_sub)
+    card_peak = summary_card(t("fc_peak"), ft.Icons.WB_SUNNY, "#F59E0B", ref_peak, ref_peak_at)
+    card_total = summary_card(t("fc_daily_total"), ft.Icons.BATTERY_CHARGING_FULL, "#10B981", ref_total, ref_total_sub)
 
     chart_container = ft.Container(
         content=ft.Column(
             [
                 ft.Row(
                     [
-                        ft.Text("📈 24 Сағаттық Болжам Графигі (kW)", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+                        ft.Text(t("fc_chart_title"), size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
                         ft.Row(
                             [
                                 ft.Container(width=10, height=10, bgcolor="#F59E0B", border_radius=5),
-                                ft.Text("Күн", size=10, color=c["text_secondary"]),
+                                ft.Text(t("fc_legend_solar"), size=10, color=c["text_secondary"]),
                             ],
                             spacing=6,
                         ),
@@ -71,7 +74,7 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 ft.Container(height=10),
-                ft.Text("Жүктелуде…", size=12, color=c["text_secondary"], ref=ref_status),
+                ft.Text(t("loading"), size=12, color=c["text_secondary"], ref=ref_status),
                 ft.Row([], scroll=ft.ScrollMode.ALWAYS, spacing=8, ref=ref_chart),
             ]
         ),
@@ -83,10 +86,10 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
 
     data_table = ft.DataTable(
         columns=[
-            ft.DataColumn(ft.Text("Уақыт", size=11, weight=ft.FontWeight.BOLD, color=c["text_secondary"])),
-            ft.DataColumn(ft.Text("Қуат kW", size=11, weight=ft.FontWeight.BOLD, color="#F59E0B")),
-            ft.DataColumn(ft.Text("Радиация", size=11, weight=ft.FontWeight.BOLD, color=c["primary"])),
-            ft.DataColumn(ft.Text("Бұлт %", size=11, weight=ft.FontWeight.BOLD, color=c["text_secondary"])),
+            ft.DataColumn(ft.Text(t("fc_col_time"), size=11, weight=ft.FontWeight.BOLD, color=c["text_secondary"])),
+            ft.DataColumn(ft.Text(t("fc_col_power"), size=11, weight=ft.FontWeight.BOLD, color="#F59E0B")),
+            ft.DataColumn(ft.Text(t("fc_col_irradiance"), size=11, weight=ft.FontWeight.BOLD, color=c["primary"])),
+            ft.DataColumn(ft.Text(t("fc_col_cloud"), size=11, weight=ft.FontWeight.BOLD, color=c["text_secondary"])),
             ft.DataColumn(ft.Text("t°C", size=11, weight=ft.FontWeight.BOLD, color="#14B8A6")),
         ],
         rows=[],
@@ -99,7 +102,7 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
     table_container = ft.Container(
         content=ft.Column(
             [
-                ft.Text("📋 24h Сағаттық Болжам Кестесі", size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+                ft.Text(t("fc_table_title"), size=14, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
                 ft.Container(height=6),
                 ft.Row([data_table], scroll=ft.ScrollMode.ALWAYS),
             ]
@@ -119,13 +122,13 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
 
         if not rows:
             _set(ref_peak, "—")
-            _set(ref_peak_at, "Қолжетімсіз")
+            _set(ref_peak_at, t("unavailable"))
             _set(ref_total, "—")
-            _set(ref_total_sub, "Қолжетімсіз")
-            _set(
-                ref_status,
-                "Болжам алынбады. Серверде WEATHERAPI_KEY бапталмаған болуы мүмкін.",
-            )
+            _set(ref_total_sub, t("unavailable"))
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
+            _set(ref_status, t("fc_err_no_forecast", reason=reason))
+            if ref_status.current is not None:
+                ref_status.current.visible = True
             if ref_chart.current is not None:
                 ref_chart.current.controls = []
             if ref_table.current is not None:
@@ -140,9 +143,9 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
         total_kwh = sum(powers)
 
         _set(ref_peak, f"{peak:.1f} kW")
-        _set(ref_peak_at, f"Сағат {int(peak_row.get('hour', 0)):02d}:00-де")
+        _set(ref_peak_at, t("fc_peak_at", hour=int(peak_row.get("hour", 0))))
         _set(ref_total, f"{total_kwh:.0f} kWh")
-        _set(ref_total_sub, f"{len(rows)} сағаттық болжам")
+        _set(ref_total_sub, t("fc_hours_count", n=len(rows)))
         _set(ref_status, "")
         if ref_status.current is not None:
             ref_status.current.visible = False
@@ -185,8 +188,8 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
 
     view = ft.ListView(
         controls=[
-            ft.Text("📊 24 Сағаттық Болжам жүйесі", size=18, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
-            ft.Text("Түркістан ауа райы болжамы бойынша RandomForest моделі", size=12, color=c["text_secondary"]),
+            ft.Text(t("fc_title"), size=18, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("fc_subtitle"), size=12, color=c["text_secondary"]),
             ft.Container(height=10),
             ft.Row([card_peak, card_total], spacing=10),
             ft.Container(height=12),
