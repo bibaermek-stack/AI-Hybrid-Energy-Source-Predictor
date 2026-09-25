@@ -37,16 +37,28 @@ git push origin main
 
 ---
 
-## 3. Телефоныңыздағы (APK) 24/7 Режимді Иске Қосу
+## 3. Мобильді қосымшаға арналған API сервисі
 
-Телефоныңыздағы **EcoPredict AI** қолданбасын бұлттық серверге қосу өте оңай:
+Мобильді қосымша **тек бір** серверге қосылады — осы репозиторийден деплой болатын Railway сервисі:
+`https://ecopradict-mobile-production.up.railway.app` (`mobile/config.py`). Қосымшада URL енгізудің
+қажеті жоқ — ол қосымшаның ішіне жазылған.
 
-1. Телефоныңыздағы **EcoPredict AI** APK қолданбасын ашыңыз.
-2. Төменгі навигация менюінен **«Баптаулар» (Settings)** қосымшасына өтіңіз.
-3. **«API URL»** өрісіне Railway берген доменді енгізіңіз:
-   `https://ecopredict-ai-production.up.railway.app`
-4. **«Байланысты тексеру»** (Test Connection) батырмасын басыңыз.
-5. Жоғарғы оң жақта **«🟢 API Онлайн»** индикаторы жанады!
+Бұл сервис толық API-ды беруі үшін Railway-де мына баптаулар керек:
+
+| Railway баптауы | Мәні |
+|---|---|
+| **Settings → Source → Root Directory** | бос (репозиторий түбірі). `mobile` тұрса — тек `/health` жұмыс істейді, қалғаны 404 |
+| **Settings → Deploy → Custom Start Command** | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| **Variables** | `WEATHERAPI_KEY`, `ECOPREDICT_API_KEY`, Solarman кілттері |
+
+> Түбірдегі `Procfile` (`python run_app.py`) жария портта Streamlit-ті іске қосады, API-ды емес —
+> сондықтан мобильді сервис үшін Start Command-ты міндетті түрде жоғарыдағыдай көрсетіңіз.
+
+**Тексеру:** браузерде `https://ecopradict-mobile-production.up.railway.app/health` ашыңыз.
+Жауапта `"api": "full"` (немесе `"forecast_backend"`) болуы тиіс. `"api": "stub"` — Root Directory әлі `mobile`.
+
+Репозиторий **private** болса, Railway-дің GitHub қосымшасына осы репоға қолжетімділік беріңіз
+(GitHub → Settings → Applications → Railway → Repository access), әйтпесе жаңа деплой басталмайды.
 
 ---
 

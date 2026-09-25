@@ -2,12 +2,19 @@
 Config, themes, colors, and localization dictionaries for EcoPredict AI Mobile.
 """
 
-# Default FastAPI backend (Railway public domain -> container port 8001).
+import os
+
+# The one backend the app talks to: the Railway service deployed from this
+# repository (AI-Hybrid-Energy-Source-Predictor). It must serve root main.py
+# (`uvicorn main:app --port $PORT`) so /health reports api: "full".
 # Must stay HTTPS: Android blocks cleartext HTTP by default from targetSdk 28,
 # so an http:// base silently fails in the APK no matter what the server does.
-# The previous default (http://sakura.proxy.rlwy.net:35462) was both plaintext
-# and pointing at a TCP proxy that no longer forwards to a live service.
-DEFAULT_API_BASE = "https://ecopradict-mobile-production.up.railway.app"
+PRODUCTION_API_BASE = "https://ecopradict-mobile-production.up.railway.app"
+
+# Desktop/web preview can point at a local API instead, e.g.
+#   ECOPREDICT_API_BASE=http://127.0.0.1:8001 python run_mobile.py
+# The variable is never set inside the APK/IPA, so phones always use production.
+DEFAULT_API_BASE = (os.environ.get("ECOPREDICT_API_BASE") or PRODUCTION_API_BASE).strip().rstrip("/")
 
 # App Colors - Dark & Light Palettes
 COLORS = {

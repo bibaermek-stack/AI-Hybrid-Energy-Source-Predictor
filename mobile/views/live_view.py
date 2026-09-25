@@ -326,7 +326,7 @@ def build_live_view(page: ft.Page) -> ft.Control:
     sl_capex.on_change = on_money_change
     sl_tariff.on_change = on_money_change
 
-    btn_refresh = ft.ElevatedButton(
+    btn_refresh = ft.Button(
         content=ft.Row([ft.Icon(ft.Icons.REFRESH, size=16), ft.Text("Жаңарту")],
                        alignment=ft.MainAxisAlignment.CENTER),
         on_click=load,

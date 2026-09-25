@@ -58,7 +58,7 @@ def build_settings_view(page: ft.Page, on_refresh_all: Callable[[], None]) -> ft
         on_refresh_all()
         page.update()
 
-    btn_test = ft.ElevatedButton(
+    btn_test = ft.Button(
         content=ft.Text(state.text("st_btn_test")),
         icon=ft.Icons.NETWORK_CHECK,
         style=ft.ButtonStyle(

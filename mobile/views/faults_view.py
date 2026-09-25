@@ -148,7 +148,7 @@ def build_faults_view(page: ft.Page) -> ft.Control:
         preview_box.content = img_preview
         await run_detection(content, picked.name or "panel.jpg")
 
-    btn_upload = ft.ElevatedButton(
+    btn_upload = ft.Button(
         content=ft.Text(state.text("fl_btn_upload")),
         icon=ft.Icons.UPLOAD_FILE,
         style=ft.ButtonStyle(

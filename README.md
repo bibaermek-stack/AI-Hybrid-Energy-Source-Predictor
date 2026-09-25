@@ -4,7 +4,7 @@ AI platform for **hybrid solar + wind** prediction, dispatch optimization, panel
 
 Stack: **FastAPI** · **Streamlit** · **RandomForest / XGBoost / LSTM** · **YOLOv11** · **PuLP**
 
-**Repo:** [bibaermek-stack/EcoPradict-Ai](https://github.com/bibaermek-stack/EcoPradict-Ai)
+**Repo:** [bibaermek-stack/AI-Hybrid-Energy-Source-Predictor](https://github.com/bibaermek-stack/AI-Hybrid-Energy-Source-Predictor) (canonical; `EcoPradict-Ai` is an older copy)
 
 ---
 
@@ -256,26 +256,55 @@ EcoPredict AI includes a cross-platform mobile application built with **Flet** (
 
 ### Running Mobile App
 
+Pinned to **flet 1.0.1** (`mobile/pyproject.toml`). Install the same version locally:
+`pip install "flet[all]==1.0.1"`.
+
 ```bash
-# Desktop Preview Window (390x844 smartphone aspect ratio)
+# Desktop preview window (iPhone 16 frame, 393x852)
 python run_mobile.py
 
-# Web Browser Mode
+# Web browser mode (http://localhost:8550)
 python run_mobile.py --web
+
+# Point the preview at a local API instead of production
+ECOPREDICT_API_BASE=http://127.0.0.1:8001 python run_mobile.py
 ```
+
+### Backend
+
+The app talks to one backend: the Railway service deployed from **this** repository,
+`https://ecopradict-mobile-production.up.railway.app` (`mobile/config.py`).
+That service must run the full API from the repository root:
+
+| Railway setting | Value |
+|---|---|
+| Root Directory | *(empty — repository root)* |
+| Start Command | `uvicorn main:app --host 0.0.0.0 --port $PORT` |
+| Variables | `WEATHERAPI_KEY`, `ECOPREDICT_API_KEY`, Solarman credentials |
+
+Check it with `curl https://ecopradict-mobile-production.up.railway.app/health` —
+it must report `"api": "full"`. `"api": "stub"` means Root Directory still points at `mobile/`.
 
 ### Mobile Features:
 - **Bilingual (KK / EN)**: Instant language switcher (Қазақша / English).
-- **Responsive UI**: Smartphone `BottomNavigationBar` & tablet `NavigationRail`.
-- **7 Screens**: Overview, Energy Forecast, Fault Diagnostics, Microgrid Optimization, AI Chat, Live Monitoring, and Settings.
-- **Configurable API Endpoint**: Change backend base URL in Settings to connect to physical server or local IP (`http://192.168.x.x:8001`).
+- **Screens**: Overview, ML predictions, 24h forecast, YOLO fault diagnostics, model training,
+  optimization, sustainability, labs, AI advisor, Solarman live, settings.
 
 ### Building Mobile Binaries:
 ```bash
-# Android APK
-flet build apk --target mobile/main.py
+pip install "flet[cli]==1.0.1"
 
-# iOS IPA
-flet build ipa --target mobile/main.py
+# Android APK (flet installs the Flutter/Android toolchain it needs)
+flet build apk mobile --yes
+
+# iOS — needs macOS + Xcode; an installable .ipa also needs Apple signing
+flet build ios-simulator mobile --yes
+flet build ipa mobile --yes --ios-team-id <TEAM_ID> --ios-export-method app-store-connect \
+  --ios-provisioning-profile <PROFILE> --ios-signing-certificate "Apple Distribution"
 ```
+
+CI builds these too: [`build-android.yml`](.github/workflows/build-android.yml) runs on every
+push touching `mobile/`; [`build-ios.yml`](.github/workflows/build-ios.yml) runs on demand and
+on `v*` tags. Signing secrets are listed at the top of each workflow.
+`tests/test_mobile_smoke.py` builds every screen against the pinned flet.
 

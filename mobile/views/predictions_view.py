@@ -78,7 +78,7 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
     except RuntimeError:
         pass
 
-    btn_calc = ft.ElevatedButton(
+    btn_calc = ft.Button(
         content=ft.Row(
             [ft.Icon(ft.Icons.AUTO_AWESOME, color="#FFFFFF"), ft.Text("ML Болжам жасау", color="#FFFFFF", weight=ft.FontWeight.BOLD), progress_ring],
             alignment=ft.MainAxisAlignment.CENTER,

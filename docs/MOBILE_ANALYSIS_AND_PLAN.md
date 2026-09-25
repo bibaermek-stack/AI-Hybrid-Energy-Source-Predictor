@@ -5,6 +5,26 @@
 
 ---
 
+## 0. Қабылданған шешімдер және ағымдағы күй
+
+| Шешім | Не жасалды |
+|---|---|
+| **Flet 1.0-ге көшеміз** | `ft.ElevatedButton` → `ft.Button` (6 экран); `flet==1.0.1` бекітілді (`mobile/pyproject.toml`, `requirements.txt`, `mobile/requirements.txt`). 12 экранның бәрі 1.0.1-де ескертусіз құрастырылады; веб-режимде 11 экран нақты іске қосылып, скриншотпен тексерілді |
+| **Backend — осы репоның Railway сервисі** | Клиент тек `https://ecopradict-mobile-production.up.railway.app`-ке қосылады; басқа репо сервистеріне (`ecopradict-ai-production`, `ecopredict.kz`) үнсіз ауысу алынды. Жергілікті тест үшін `ECOPREDICT_API_BASE` айнымалысы. Railway баптаулары: `RAILWAY_DEPLOYMENT.md` 3-бөлім |
+| **Репозиторий private болуы керек** | Көрінуді тек GitHub баптауларынан иесі өзгерте алады (Settings → General → Danger Zone → Change visibility). Git тарихында құпия кілт табылмады (үлгі бойынша іздеу) |
+
+0-кезеңнен жасалғаны:
+- iOS workflow қайта жазылды: жарамды флагтар, `mobile/` жолы, тек `flet[cli]` орнатылады, қолмен немесе `v*` тегімен іске қосылады. Signing secrets болмаса — Simulator build, болса — App Store IPA.
+- Жаңа Android workflow: `mobile/` өзгерген әр push-та APK; `v*` тегінде keystore secrets болса — signed AAB.
+- CI: `test_forecast_endpoint` енді ауа райын mock арқылы алады; кілтсіз жағдай үшін бөлек тест қосылды; `tests/test_mobile_smoke.py` қосылды. Жергілікті нәтиже: 77/77.
+- README-дегі build командалары түзетілді.
+
+**Қалғаны сізден (кодпен жасалмайды):**
+1. Railway: `ecopradict-mobile` сервисінде Root Directory-ді тазалау, Start Command `uvicorn main:app --host 0.0.0.0 --port $PORT`, айнымалыларды қою; `/health`-те `"api": "stub"` емес екенін тексеру. **Осыны жасамай бұл тармақты merge етсеңіз, қосымша backend таппайды** — бұрын ол басқа репоның сервисіне үнсіз ауысып жүрген.
+2. GitHub-та репозиторийді private ету; кейін Railway GitHub App-қа осы репоға рұқсат беру.
+
+---
+
 ## 1. Қысқаша қорытынды
 
 Мобильді қосымша (Flet/Python → Flutter) жақсы бастама алған. Бірақ **қазіргі күйінде Android не iOS үшін
@@ -152,12 +172,12 @@
 
 ### 0-кезең — Шұғыл: қосымша жиналып, іске қосылсын (1–2 күн)
 
-1. `mobile/pyproject.toml`: `flet==0.86.5` бекіту (құрылғыда тексерілген нұсқа).
-2. iOS workflow-ды түзету: `flet build ipa mobile`, тек `pip install "flet[all]==0.86.5"`, trigger — `workflow_dispatch` + `v*` тегтері + `paths: mobile/**`. Signing жоқ кезде smoke үшін `flet build ios-simulator mobile`.
-3. Жаңа `build-android.yml`: `flet build apk mobile` → artifact ретінде жүктеу.
-4. CI-дегі `test_forecast_endpoint`-ті түзету (mock немесе Open-Meteo fallback).
-5. `tests/test_mobile_smoke.py`: барлық экранды бекітілген Flet нұсқасында құрастыратын тест (осы талдаудағы smoke скрипт негізінде) — Flet жаңартуы бір нәрсені бұзса, CI бірден көрсетеді.
-6. README build командаларын түзету.
+1. ✅ `flet==1.0.1` бекітілді және код 1.0-ге көшірілді (шешім бойынша 0.86.5 орнына).
+2. ✅ iOS workflow-ды түзету: `flet build ipa mobile`, тек `pip install "flet[cli]==1.0.1"`, trigger — `workflow_dispatch` + `v*` тегтері + `paths: mobile/**`. Signing жоқ кезде smoke үшін `flet build ios-simulator mobile`.
+3. ✅ Жаңа `build-android.yml`: `flet build apk mobile` → artifact ретінде жүктеу.
+4. ✅ CI-дегі `test_forecast_endpoint`-ті түзету (mock немесе Open-Meteo fallback).
+5. ✅ `tests/test_mobile_smoke.py`: барлық экранды бекітілген Flet нұсқасында құрастыратын тест (осы талдаудағы smoke скрипт негізінде) — Flet жаңартуы бір нәрсені бұзса, CI бірден көрсетеді.
+6. ✅ README build командаларын түзету.
 
 **Критерий:** CI жасыл; Android APK және iOS simulator build Actions-та сәтті; APK телефонда ашылады.
 
@@ -181,7 +201,7 @@
 5. Health нәтижесі келгенде header-ді жаңарту; қайта қосылу батырмасы.
 6. Слайдерлерге `on_change_end`; Predictions/Optimization-ды құрастыру кезінде емес, ашылғанда жүктеу.
 7. Ақау анықтау: камера + галерея, сурет өлшемін тексеру.
-8. Flet 1.0-ге көшу: `ElevatedButton → Button`, `flet==1.0.x` бекіту, құрылғыда толық тексеру.
+8. Flet 1.0: ✅ көшірілді (0-кезеңде); қалғаны — нақты құрылғыда толық тексеру.
 
 **Критерий:** Барлық экран 360–430 px енінде дұрыс көрінеді; EN режимінде қазақша мәтін қалмайды; баптаулар қайта іске қосқаннан кейін сақталады.
 
@@ -220,9 +240,9 @@
 
 ## 7. Сіздің шешіміңіз керек сұрақтар
 
-1. **Flet нұсқасы**: алдымен `0.86.5`-ке бекітіп (жылдам, тексерілген), кейін 1.0-ге көшеміз бе — әлде бірден 1.0-ге көшеміз бе? *Ұсыныс: алдымен 0.86.5.*
+1. ~~**Flet нұсқасы**~~ — **шешілді: бірден 1.0-ге көшеміз** (жасалды).
 2. **Дүкен аккаунттары**: Apple Developer Program (жылына ~$99) және Google Play Console (бір рет ~$25) бар ма / кім тіркейді?
-3. **Канондық backend URL**: қай Railway сервисі қалады (`ecopradict-mobile-production`, `ecopradict-ai-production` немесе `ecopredict.kz`)?
+3. ~~**Канондық backend URL**~~ — **шешілді: осы репоның Railway сервисі** (`ecopradict-mobile-production`).
 4. **Solarman кілттері**: production серверде нақты кілттер болады ма? Болмаса, Solarman экраны демо режимде «ДЕМО» белгісімен көрсетіледі.
-5. **Негізгі репозиторий**: `AI-Hybrid-Energy-Source-Predictor` деп бекітеміз бе (`EcoPradict-Ai` архивке)?
+5. ~~**Негізгі репозиторий**~~ — **шешілді: `AI-Hybrid-Energy-Source-Predictor`, private болады.**
 6. **Экрандар жиыны**: мобильде 11 бөлімнің бәрі керек пе, әлде Labs/Learn/Training-ті «Тағы» ішіне қоямыз ба?

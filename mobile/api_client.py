@@ -9,8 +9,10 @@ import ssl
 import urllib.request
 from typing import Dict, Any, Optional, List
 try:
+    from mobile.config import DEFAULT_API_BASE
     from mobile.state import state
 except (ImportError, ModuleNotFoundError):
+    from config import DEFAULT_API_BASE  # type: ignore # pyright: ignore[reportMissingImports]
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
@@ -160,25 +162,19 @@ class APIClient:
         return res.get("api") == "full" or "forecast_backend" in res
 
     async def check_health(self) -> Dict[str, Any]:
-        """Find a backend that serves the feature routes, not just /health."""
-        candidates = [
-            state.api_base_url.strip().rstrip("/"),
-            "https://ecopradict-mobile-production.up.railway.app",
-            "https://ecopradict-ai-production.up.railway.app",
-            "https://www.ecopredict.kz",
-            # Android blocks cleartext HTTP by default (targetSdk >= 28), so
-            # these only ever resolve in the desktop/web preview.
-            "http://127.0.0.1:8001",
-            "http://127.0.0.1:8555",
-        ]
+        """Confirm the backend serves the feature routes, not just /health."""
+        # Only this repository's Railway service. The app used to fall through
+        # to services deployed from other repositories (ecopradict-ai,
+        # ecopredict.kz) and silently switch to whichever answered first.
+        candidates = [state.api_base_url.strip().rstrip("/"), DEFAULT_API_BASE]
         unique_candidates = [c for c in list(dict.fromkeys(candidates)) if c]
 
         stub_hosts: List[str] = []
         for index, base_url in enumerate(unique_candidates):
             url = f"{base_url}/health"
-            # Give the configured backend room to wake up; the fallbacks only
-            # exist to recover from a wrong URL, so they stay impatient rather
-            # than making a genuine outage take a minute to report.
+            # Give the configured backend room to wake up; the default is only
+            # a fallback for a mistyped URL, so it stays impatient rather than
+            # making a genuine outage take much longer to report.
             timeout = self.HEALTH_TIMEOUT if index == 0 else self.FALLBACK_HEALTH_TIMEOUT
             res = await asyncio.to_thread(_http_get_sync, url, timeout)
             if not (res and isinstance(res, dict)):

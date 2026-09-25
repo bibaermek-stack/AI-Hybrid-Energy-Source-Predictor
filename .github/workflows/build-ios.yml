@@ -1,44 +1,109 @@
-name: Build iOS App (.ipa)
+# iOS build for the Flet mobile app (mobile/).
+#
+# Runs on demand (Actions -> Build iOS -> Run workflow) and on v* tags only:
+# macOS runners bill at 10x Linux minutes on private repositories, so this does
+# not run on every push.
+#
+# Without signing secrets it builds for the iOS Simulator, which proves the app
+# compiles but cannot be installed on a phone. With these secrets it builds an
+# App Store-signed .ipa for TestFlight (needs an Apple Developer Program account):
+#   IOS_TEAM_ID                    10-character Apple team ID
+#   IOS_CERT_P12_BASE64            base64 of the "Apple Distribution" certificate (.p12)
+#   IOS_CERT_PASSWORD              password of that .p12
+#   IOS_PROVISIONING_PROFILE_BASE64  base64 of the App Store provisioning profile
+#
+# flet build installs the Flutter SDK version it requires (--yes); do not add a
+# separate Flutter setup step — a mismatched Flutter makes the build fail.
+
+name: Build iOS (Flet)
 
 on:
   workflow_dispatch:
   push:
-    branches: ["*"]
+    tags: ["v*"]
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build-ios:
-    name: Build iOS App (.ipa)
-    runs-on: macos-14
+    name: Build iOS
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      FLET_CLI_NO_RICH_OUTPUT: "1"
+      IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.24.x'
-          channel: 'stable'
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: pip
+          python-version: "3.12"
 
-      - name: Install dependencies & Flet CLI
+      - name: Cache Flutter SDK installed by flet
+        uses: actions/cache@v4
+        with:
+          path: ~/flutter
+          key: flet-flutter-${{ runner.os }}-${{ hashFiles('mobile/pyproject.toml') }}
+
+      # Only the CLI: the app's own dependencies come from mobile/pyproject.toml
+      # and are resolved for iOS by flet build, not installed here.
+      - name: Install Flet CLI
+        run: pip install "flet[cli]==1.0.1"
+
+      - name: Build for iOS Simulator (unsigned)
+        if: env.IOS_PROVISIONING_PROFILE_BASE64 == ''
+        run: flet build ios-simulator mobile --yes --build-number ${{ github.run_number }}
+
+      - name: Install signing certificate and provisioning profile
+        if: env.IOS_PROVISIONING_PROFILE_BASE64 != ''
+        env:
+          IOS_CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
         run: |
-          python -m pip install --upgrade pip
-          pip install flet
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          echo "$IOS_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -P "$IOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/"//g')
+          rm -f "$RUNNER_TEMP/cert.p12"
 
-      - name: Build iOS IPA Package
+          PROFILE="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PROFILE"
+          UUID="$(security cms -D -i "$PROFILE" | plutil -extract UUID raw -o - -)"
+          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+                     "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$dir"
+            cp "$PROFILE" "$dir/$UUID.mobileprovision"
+          done
+          echo "IOS_PROFILE_UUID=$UUID" >> "$GITHUB_ENV"
+
+      - name: Build signed IPA (App Store / TestFlight)
+        if: env.IOS_PROVISIONING_PROFILE_BASE64 != ''
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
-          flet build ipa --no-codesign --project-name ecopredict-ai-mobile
+          flet build ipa mobile --yes --build-number ${{ github.run_number }} \
+            --ios-team-id "$IOS_TEAM_ID" \
+            --ios-export-method app-store-connect \
+            --ios-provisioning-profile "$IOS_PROFILE_UUID" \
+            --ios-signing-certificate "Apple Distribution"
 
-      - name: Upload .ipa Artifact
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: EcoPredict-AI-iOS-IPA
+          name: EcoPredict-AI-iOS
           path: |
-            build/ipa/*.ipa
-            build/ios/archive/*.xcarchive
+            mobile/build/ipa/
+            mobile/build/ios-simulator/
+          if-no-files-found: error

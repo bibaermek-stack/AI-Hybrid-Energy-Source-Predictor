@@ -84,7 +84,7 @@ def build_optimization_view(page: ft.Page) -> ft.Control:
     except RuntimeError:
         pass
 
-    btn_opt = ft.ElevatedButton(
+    btn_opt = ft.Button(
         content=ft.Text(state.text("opt_btn")),
         icon=ft.Icons.TUNE,
         style=ft.ButtonStyle(

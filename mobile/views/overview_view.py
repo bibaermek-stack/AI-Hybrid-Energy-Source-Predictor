@@ -192,7 +192,7 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
     )
 
     # Quick action shortcuts using string keys
-    action_btn_predict = ft.ElevatedButton(
+    action_btn_predict = ft.Button(
         content=ft.Row([ft.Icon(ft.Icons.LIGHTBULB, size=16), ft.Text("⚡ ML Лезде Болжау Жобалау")], alignment=ft.MainAxisAlignment.CENTER),
         style=ft.ButtonStyle(
             bgcolor=c["primary"],
