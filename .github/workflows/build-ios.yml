@@ -41,6 +41,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The runner defaults to Xcode 16.4, whose SDK lacks iOS 26 APIs that the
+      # plugins in flet 1.0.1's Flutter 3.44 call (device_info_plus 12.4 uses
+      # NSProcessInfo.isiOSAppOnVision) — the build failed with "No visible
+      # @interface ... declares the selector 'isiOSAppOnVision'".
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -107,3 +119,4 @@ jobs:
             mobile/build/ipa/
             mobile/build/ios-simulator/
           if-no-files-found: error
+          retention-days: 14

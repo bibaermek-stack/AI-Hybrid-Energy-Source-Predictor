@@ -78,6 +78,7 @@ jobs:
           name: EcoPredict-AI-Android-APK
           path: mobile/build/apk/
           if-no-files-found: error
+          retention-days: 14
 
       - name: Upload AAB
         if: startsWith(github.ref, 'refs/tags/v') && env.ANDROID_KEYSTORE_BASE64 != ''
@@ -86,3 +87,4 @@ jobs:
           name: EcoPredict-AI-Android-AAB
           path: mobile/build/aab/
           if-no-files-found: error
+          retention-days: 14
