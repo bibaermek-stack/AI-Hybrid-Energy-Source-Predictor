@@ -1,0 +1,87 @@
+# Checks the production backend the mobile app talks to.
+#
+# The URL is read from mobile/config.py (PRODUCTION_API_BASE), so this always
+# probes exactly what the APK/IPA calls. Fails when /health answers but the
+# feature routes are not mounted — the state a Railway service with
+# Root Directory = mobile ends up in, where every screen 404s.
+# Missing optional server configuration (Solarman credentials, WeatherAPI key)
+# is reported as a warning, not a failure.
+
+name: Backend health
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
+  push:
+    paths:
+      - "mobile/config.py"
+      - ".github/workflows/backend-health.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    name: Production API contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Probe production backend
+        run: |
+          python3 - <<'EOF'
+          import json, re, time, urllib.error, urllib.request
+
+          src = open("mobile/config.py", encoding="utf-8").read()
+          base = re.search(r'PRODUCTION_API_BASE\s*=\s*"([^"]+)"', src).group(1).rstrip("/")
+          print(f"Backend: {base}")
+
+          def get(path, timeout=60):
+              t0 = time.time()
+              try:
+                  with urllib.request.urlopen(base + path, timeout=timeout) as r:
+                      body = r.read().decode("utf-8", "replace")
+                      code = r.status
+              except urllib.error.HTTPError as e:
+                  body, code = e.read().decode("utf-8", "replace"), e.code
+              except Exception as e:
+                  body, code = f"{type(e).__name__}: {e}", 0
+              print(f"GET {path} -> {code} in {time.time() - t0:.1f}s")
+              try:
+                  return code, json.loads(body)
+              except ValueError:
+                  return code, body[:300]
+
+          code, health = get("/health")
+          print(json.dumps(health, indent=2, ensure_ascii=False) if isinstance(health, dict) else health)
+          if code != 200 or not isinstance(health, dict):
+              raise SystemExit("::error::/health did not return JSON 200")
+          if not (health.get("api") == "full" or "forecast_backend" in health):
+              raise SystemExit(
+                  "::error::Feature routes are NOT mounted (api="
+                  f"{health.get('api')!r}, error={health.get('api_router_error')!r}). "
+                  "Railway service must deploy from the repository root with "
+                  "`uvicorn main:app --host 0.0.0.0 --port $PORT`."
+              )
+          models = health.get("models_loaded") or {}
+          if not (models.get("solar") and models.get("wind")):
+              raise SystemExit(f"::error::Models not loaded: {models}")
+          print("OK: feature routes mounted, solar and wind models loaded")
+
+          code, live = get("/solarman/live?demo=false")
+          if code == 200 and isinstance(live, dict):
+              print(f"OK: Solarman live source={live.get('source')}")
+          else:
+              print(f"::warning::/solarman/live without demo -> {code}: {str(live)[:200]} "
+                    "(Solarman credentials missing on the server? The app then shows demo data.)")
+
+          code, fc = get("/solarman/forecast?dc_capacity_kwp=25")
+          if code == 200 and isinstance(fc, dict) and fc.get("forecasts"):
+              print(f"OK: 24h forecast returned {len(fc['forecasts'])} hours")
+          else:
+              print(f"::warning::/solarman/forecast -> {code}: {str(fc)[:200]} "
+                    "(WEATHERAPI_KEY missing on the server? The 24h screen stays empty.)")
+          EOF
