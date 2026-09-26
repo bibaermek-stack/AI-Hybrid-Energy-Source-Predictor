@@ -87,15 +87,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Runs the Trivy image directly. The job used `aquasecurity/trivy-action@0.28.0`,
+      # a ref GitHub can no longer resolve — the job failed before any step ran.
+      # Informational only (exit code 0), as before.
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
         continue-on-error: true
-        with:
-          image-ref: ${{ steps.meta.outputs.tags }}
-          format: table
-          exit-code: "0"
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          # metadata-action emits one tag per line (sha, plus latest on main);
+          # the image was loaded under all of them, so scan the first.
+          IMAGE="$(printf '%s\n' "$TAGS" | head -n 1)"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy:0.58.1 image \
+            --severity CRITICAL,HIGH --ignore-unfixed --exit-code 0 --no-progress \
+            "$IMAGE"
 
   deploy:
     name: Deploy (main only)
