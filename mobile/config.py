@@ -4,7 +4,7 @@ Config and colour themes for EcoPredict AI Mobile.
 
 import os
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 # The one backend the app talks to: the Railway service deployed from this
 # repository (AI-Hybrid-Energy-Source-Predictor). It must serve root main.py

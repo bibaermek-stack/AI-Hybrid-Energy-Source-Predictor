@@ -7,8 +7,10 @@ import json
 import logging
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
 try:
     from mobile.config import DEFAULT_API_BASE
     from mobile.state import state
@@ -436,26 +438,47 @@ class APIClient:
         )
         return res if isinstance(res, dict) else None
 
-    async def microgrid_day(
-        self,
-        num_panels: int,
-        battery_kwh: float,
-        load_kw: float,
-        inverter_kw: float,
-        weather: str = "sample",
-    ) -> Optional[Dict[str, Any]]:
-        """24 h PV/battery/grid lab simulation (POST /labs/microgrid-day)."""
-        payload = {
-            "num_panels": int(num_panels),
-            "battery_kwh": battery_kwh,
-            "load_kw": load_kw,
-            "inverter_kw": inverter_kw,
-            "weather": weather,
-        }
+    # ---- education labs (api/labs.py) ----------------------------------
+    async def labs_list(self) -> Optional[List[Dict[str, Any]]]:
+        """The 12 labs (GET /labs)."""
+        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/labs", self.timeout)
+        labs = res.get("labs") if isinstance(res, dict) else None
+        return labs if isinstance(labs, list) else None
+
+    async def lab_detail(self, lab_id: str) -> Optional[Dict[str, Any]]:
+        """Parameters, theory (kk/en) and 3D viewer path of one lab (GET /labs/{id})."""
+        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/labs/{lab_id}", self.timeout)
+        return res if isinstance(res, dict) else None
+
+    async def lab_run(self, lab_id: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Run a lab on the server (POST /labs/{id}/run): metrics, charts, notes."""
         res = await asyncio.to_thread(
-            _http_post_sync, f"{state.api_base_url}/labs/microgrid-day", payload, self.timeout
+            _http_post_sync, f"{state.api_base_url}/labs/{lab_id}/run", {"params": params}, 60.0
         )
         return res if isinstance(res, dict) else None
+
+    async def lab_test(self, lab_id: str) -> Optional[Dict[str, Any]]:
+        """The lab's final test without answers (GET /labs/{id}/test)."""
+        res = await asyncio.to_thread(
+            _http_get_sync, f"{state.api_base_url}/labs/{lab_id}/test?lang={state.lang}", self.timeout
+        )
+        return res if isinstance(res, dict) else None
+
+    async def lab_grade(self, lab_id: str, answers: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Grade the test on the server (POST /labs/{id}/test/grade)."""
+        res = await asyncio.to_thread(
+            _http_post_sync,
+            f"{state.api_base_url}/labs/{lab_id}/test/grade",
+            {"answers": answers, "lang": state.lang},
+            60.0,
+        )
+        return res if isinstance(res, dict) else None
+
+    @staticmethod
+    def lab_viewer_url(viewer_path: str) -> str:
+        """The 3D lab page on the API server; it calls back to the same server."""
+        base = state.api_base_url
+        return f"{base}{viewer_path}?lang={state.lang}&api={urllib.parse.quote(base, safe='')}"
 
 
 api_client = APIClient()

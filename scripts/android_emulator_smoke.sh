@@ -4,7 +4,10 @@
 #   2. Back from a tab returns Home instead of closing the app,
 #   3. Back from a More screen returns to More,
 #   4. Back on Home closes the app,
-#   5. the camera opens and a capture reaches the diagnosis (reported, not fatal).
+#   5. the camera opens and a capture reaches the diagnosis,
+#   6. the labs: the list loads, lab 1 runs on the server, Back returns to the
+#      list, and lab 12's 3D model loads in the WebView with WebGL. Until the
+#      server the APK talks to serves /labs this step is reported, not failed.
 # Screenshots, UI dumps and logcat go to $OUT for the workflow artifact.
 set -uo pipefail
 
@@ -119,6 +122,68 @@ if launch; then
 else
   echo "NOTE: relaunch for the camera step failed"
 fi
+
+# 6. labs
+labs_step() {
+  launch || { echo "NOTE: relaunch for the labs step failed"; return; }
+  tap_tab "Тағы" 4
+  sleep 3
+  $UI tap "Зертханалар" --prefix || { fail "Labs tile not found under More"; return; }
+  local loaded=""
+  for _ in $(seq 1 20); do
+    if $UI has "Күн қуаты және ауа райы" --contains >/dev/null 2>&1; then loaded=yes; break; fi
+    if $UI has "Зертханалар жүктелмеді" --contains >/dev/null 2>&1; then break; fi
+    sleep 2
+  done
+  shot 09_labs_list
+  if [ -z "$loaded" ]; then
+    echo "NOTE: the labs list did not load: $(labels_of 09_labs_list)"
+    echo "NOTE: the server the APK uses does not serve /labs yet (deploy main, then rerun)"
+    return
+  fi
+  pass "labs list loaded from the server"
+
+  $UI tap "Күн қуаты және ауа райы" --contains || { fail "lab 1 card not tappable"; return; }
+  sleep 5
+  $UI tap "Іске қосу" --prefix || fail "Run button not found in lab 1"
+  local ran=""
+  for _ in $(seq 1 15); do
+    if $UI has "DC қуаты P_DC" --contains >/dev/null 2>&1; then ran=yes; break; fi
+    sleep 2
+  done
+  shot 10_lab1_result
+  [ -n "$ran" ] && pass "lab 1 ran on the server and shows its result" || fail "lab 1 result not shown: $(labels_of 10_lab1_result)"
+
+  adb shell input keyevent KEYCODE_BACK
+  sleep 3
+  shot 11_after_back_from_lab
+  if in_front && grep -q "12 зертхана" "$OUT/11_after_back_from_lab.xml"; then
+    pass "Back in a lab returned to the labs list"
+  else
+    fail "Back in a lab did not return to the list"
+  fi
+
+  for _ in 1 2 3; do $UI swipe up; sleep 1; done
+  $UI tap "Күн инверторы жүйесі 3D-де" --contains || { fail "lab 12 card not found"; return; }
+  adb logcat -c
+  local ready=""
+  for _ in $(seq 1 30); do
+    ready="$(adb logcat -d | grep -o 'LAB3D {[^}]*"type":"ready"[^}]*}' | tail -n 1)"
+    [ -n "$ready" ] && break
+    sleep 3
+  done
+  shot 12_lab3d
+  echo "3D viewer: ${ready:-no LAB3D ready message}"
+  echo "lab 12 screen: $(labels_of 12_lab3d)"
+  if echo "$ready" | grep -q '"webgl":true'; then
+    pass "3D model loaded in the WebView with WebGL"
+  elif echo "$ready" | grep -q '"webgl":false'; then
+    echo "NOTE: the viewer loaded but this emulator's WebView has no WebGL (software GPU)"
+  else
+    fail "the 3D viewer did not report ready"
+  fi
+}
+labs_step
 
 adb logcat -d > "$OUT/logcat.txt"
 grep -iE "Traceback|Exception|flutter.*error|FATAL" "$OUT/logcat.txt" | head -50 > "$OUT/logcat_errors.txt" || true

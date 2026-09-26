@@ -15,7 +15,7 @@
 
 [project]
 name = "ecopredict-ai-mobile"
-version = "1.1.0"
+version = "1.2.0"
 description = "EcoPredict AI — cross-platform mobile client"
 requires-python = ">=3.9"
 dependencies = [
@@ -26,6 +26,9 @@ dependencies = [
     # In-app camera for panel photos (faults screen). Flet extensions must
     # match the flet version exactly; tests/test_mobile_smoke.py checks it.
     "flet-camera==1.0.1",
+    # WebView for the 3D inverter lab (static/lab3d/ served by the API). Must
+    # match flet too.
+    "flet-webview==1.0.1",
     # Android carries no CA bundle at OpenSSL's compiled-in path, so urllib's
     # HTTPS verification fails without this. flet pulls certifi in already;
     # naming it here keeps that from being an accident.
