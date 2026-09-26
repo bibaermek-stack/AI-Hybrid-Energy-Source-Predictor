@@ -101,10 +101,14 @@ def _render(lang: str) -> None:
     lab_id = lab["id"]
     st.caption(f"{t(lab['level'], lang)} · {t(lab.get('tag', {}), lang)} · {lab['source']}")
     st.info(t(lab["objectives"], lang))
+    # Always the same slot: an element appearing above the tabs would shift the
+    # 3D component's position, and Streamlit would remount (reload) it.
+    done_slot = st.empty()
     if progress.lab_done(lab_id):
-        render_status_badge(
-            _t(lang, "Test passed — lab completed", "Тест өтті — зертхана аяқталды"), "ok"
-        )
+        with done_slot:
+            render_status_badge(
+                _t(lang, "Test passed — lab completed", "Тест өтті — зертхана аяқталды"), "ok"
+            )
 
     is_3d = lab_id == LAB_3D
     tabs = _tabs(

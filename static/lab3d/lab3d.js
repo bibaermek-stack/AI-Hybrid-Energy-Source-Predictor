@@ -675,6 +675,7 @@ function onStreamlitRender(args) {
   if (S.args.test_result && (!prev.test_result || prev.test_result.nonce !== S.args.test_result.nonce)) {
     S.test.result = S.args.test_result;
     S.test.busy = false;
+    S.mode = 'test'; // also after a remount, show the result that just arrived
   }
   if (LABSTATE) render();
   else setFrameHeight();
