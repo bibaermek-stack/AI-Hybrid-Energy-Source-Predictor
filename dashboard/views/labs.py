@@ -314,7 +314,7 @@ def _test_panel(lab_id: str, lang: str, progress: ProgressTracker) -> None:
         for i, q in enumerate(test["questions"], start=1):
             mark = "▶ " if q["kind"] == "run" else ""
             st.markdown(f"**{mark}{i}. {q['prompt']}**")
-            key = f"lt_{lab_id}_{q['id']}"
+            key = f"ltest_{lab_id}_{q['id']}"
             if q["kind"] == "choice":
                 st.radio(
                     q["prompt"],
@@ -348,7 +348,7 @@ def _test_panel(lab_id: str, lang: str, progress: ProgressTracker) -> None:
 
 def _submit_test(lab_id: str, qids: list[str], lang: str) -> None:
     """Form callback: runs before the page is redrawn, so the feedback shows at once."""
-    answers = {qid: st.session_state.get(f"lt_{lab_id}_{qid}") for qid in qids}
+    answers = {qid: st.session_state.get(f"ltest_{lab_id}_{qid}") for qid in qids}
     r = grade_test(lab_id, answers, lang)
     st.session_state[f"lab_test_result_{lab_id}"] = r
     _record_test(ProgressTracker.from_session(st.session_state), lab_id, r)
