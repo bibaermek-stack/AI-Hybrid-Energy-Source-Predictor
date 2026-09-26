@@ -15,11 +15,17 @@
 
 [project]
 name = "ecopredict-ai-mobile"
-version = "1.0.0"
+version = "1.1.0"
 description = "EcoPredict AI — cross-platform mobile client"
 requires-python = ">=3.9"
 dependencies = [
-    "flet",
+    # Pinned: an unpinned "flet" pulled 1.0 into a build written for 0.86 and
+    # the app crashed on launch (ft.ElevatedButton was removed in 1.0). Bump
+    # deliberately, run tests/test_mobile_smoke.py, then test on a device.
+    "flet==1.0.1",
+    # In-app camera for panel photos (faults screen). Flet extensions must
+    # match the flet version exactly; tests/test_mobile_smoke.py checks it.
+    "flet-camera==1.0.1",
     # Android carries no CA bundle at OpenSSL's compiled-in path, so urllib's
     # HTTPS verification fails without this. flet pulls certifi in already;
     # naming it here keeps that from being an accident.
@@ -30,3 +36,17 @@ dependencies = [
 org = "kz.ecopredict"
 product = "EcoPredict AI"
 company = "EcoPredict"
+# Adds android.permission.CAMERA (camera hardware not *required*, so devices
+# without one can still install) and NSCameraUsageDescription on iOS, whose
+# generic text is replaced below. The camera plugin asks at runtime.
+permissions = ["camera"]
+
+# The diagnostics screen picks a panel photo with FilePicker. The system photo
+# picker needs no runtime permission, but App Store review rejects binaries that
+# link the photo APIs without a usage string. Deliberately not using
+# `permissions = ["photo_library"]`: that also adds READ_MEDIA_VISUAL_USER_SELECTED
+# on Android, which Google Play's photo/video policy scrutinises, and its default
+# text ("saves photos") does not describe what this app does.
+[tool.flet.ios.info]
+NSPhotoLibraryUsageDescription = "EcoPredict AI reads the solar panel photo you choose to check it for dust, cracks and other faults."
+NSCameraUsageDescription = "EcoPredict AI uses the camera to photograph a solar panel and check it for dust, cracks and other faults."

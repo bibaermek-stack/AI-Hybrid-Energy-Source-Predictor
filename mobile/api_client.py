@@ -6,11 +6,14 @@ import asyncio
 import json
 import logging
 import ssl
+import urllib.error
 import urllib.request
 from typing import Dict, Any, Optional, List
 try:
+    from mobile.config import DEFAULT_API_BASE
     from mobile.state import state
 except (ImportError, ModuleNotFoundError):
+    from config import DEFAULT_API_BASE  # type: ignore # pyright: ignore[reportMissingImports]
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
@@ -39,6 +42,18 @@ def _build_ssl_context() -> ssl.SSLContext:
 _SSL_CONTEXT = _build_ssl_context()
 
 
+def _describe_http_error(e: urllib.error.HTTPError) -> str:
+    """HTTP status plus FastAPI's `detail`, so screens can say why a call failed."""
+    detail: Any = ""
+    try:
+        detail = json.loads(e.read().decode("utf-8")).get("detail", "")
+    except Exception:
+        pass
+    if isinstance(detail, list):  # 422 validation errors
+        detail = "; ".join(str(d.get("msg", d)) if isinstance(d, dict) else str(d) for d in detail)
+    return f"HTTP {e.code}: {detail or e.reason}"
+
+
 def _http_get_sync(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
     """Synchronous HTTP GET using urllib.request."""
     global last_http_error
@@ -52,6 +67,9 @@ def _http_get_sync(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
                 body = resp.read().decode("utf-8")
                 return json.loads(body)
             last_http_error = f"HTTP {resp.status} from {url}"
+    except urllib.error.HTTPError as e:
+        last_http_error = _describe_http_error(e)
+        logger.warning("HTTP GET %s rejected: %s", url, last_http_error)
     except Exception as e:
         last_http_error = f"{type(e).__name__}: {e}"
         logger.warning("HTTP GET error for %s: %s", url, e)
@@ -78,6 +96,9 @@ def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) ->
                 body = resp.read().decode("utf-8")
                 return json.loads(body)
             last_http_error = f"HTTP {resp.status} from {url}"
+    except urllib.error.HTTPError as e:
+        last_http_error = _describe_http_error(e)
+        logger.warning("HTTP POST %s rejected: %s", url, last_http_error)
     except Exception as e:
         last_http_error = f"{type(e).__name__}: {e}"
         logger.warning("HTTP POST error for %s: %s", url, e)
@@ -121,12 +142,7 @@ def _http_post_file_sync(
                 return json.loads(resp.read().decode("utf-8"))
             last_http_error = f"HTTP {resp.status} from {url}"
     except urllib.error.HTTPError as e:
-        detail = ""
-        try:
-            detail = json.loads(e.read().decode("utf-8")).get("detail", "")
-        except Exception:
-            pass
-        last_http_error = f"HTTP {e.code}: {detail or e.reason}"
+        last_http_error = _describe_http_error(e)
         logger.warning("Upload rejected by %s: %s", url, last_http_error)
     except Exception as e:
         last_http_error = f"{type(e).__name__}: {e}"
@@ -160,25 +176,19 @@ class APIClient:
         return res.get("api") == "full" or "forecast_backend" in res
 
     async def check_health(self) -> Dict[str, Any]:
-        """Find a backend that serves the feature routes, not just /health."""
-        candidates = [
-            state.api_base_url.strip().rstrip("/"),
-            "https://ecopradict-mobile-production.up.railway.app",
-            "https://ecopradict-ai-production.up.railway.app",
-            "https://www.ecopredict.kz",
-            # Android blocks cleartext HTTP by default (targetSdk >= 28), so
-            # these only ever resolve in the desktop/web preview.
-            "http://127.0.0.1:8001",
-            "http://127.0.0.1:8555",
-        ]
+        """Confirm the backend serves the feature routes, not just /health."""
+        # Only this repository's Railway service. The app used to fall through
+        # to services deployed from other repositories (ecopradict-ai,
+        # ecopredict.kz) and silently switch to whichever answered first.
+        candidates = [state.api_base_url.strip().rstrip("/"), DEFAULT_API_BASE]
         unique_candidates = [c for c in list(dict.fromkeys(candidates)) if c]
 
         stub_hosts: List[str] = []
         for index, base_url in enumerate(unique_candidates):
             url = f"{base_url}/health"
-            # Give the configured backend room to wake up; the fallbacks only
-            # exist to recover from a wrong URL, so they stay impatient rather
-            # than making a genuine outage take a minute to report.
+            # Give the configured backend room to wake up; the default is only
+            # a fallback for a mistyped URL, so it stays impatient rather than
+            # making a genuine outage take much longer to report.
             timeout = self.HEALTH_TIMEOUT if index == 0 else self.FALLBACK_HEALTH_TIMEOUT
             res = await asyncio.to_thread(_http_get_sync, url, timeout)
             if not (res and isinstance(res, dict)):
@@ -231,8 +241,8 @@ class APIClient:
         solar_cost_per_kwh: float = 0.08,
         wind_cost_per_kwh: float = 0.06,
         strategy: str = "hybrid",
-    ) -> Dict[str, Any]:
-        """Request POST /predict from FastAPI backend."""
+    ) -> Optional[Dict[str, Any]]:
+        """ML prediction + dispatch via POST /predict (PredictionResponse)."""
         url = f"{state.api_base_url}/predict"
         payload = {
             "irradiation": irradiation,
@@ -252,43 +262,26 @@ class APIClient:
         }
 
         res = await asyncio.to_thread(_http_post_sync, url, payload, self.timeout)
-        if res and isinstance(res, dict):
-            return res
+        # None when the backend cannot answer (reason in last_http_error). This
+        # used to return a phone-side guess shaped like a real reply, with an
+        # optimal_dispatch block /predict never sends — the screens showed it
+        # as model output.
+        return res if isinstance(res, dict) else None
 
-        # Fallback estimation logic
-        solar_est = max(0.0, (irradiation / 1000.0) * 850.0 * (1 - 0.004 * (module - 25)))
-        wind_est = max(0.0, (wind_speed / 12.0) ** 3 * 600.0) if wind_speed > 2.5 else 0.0
-        total_est = solar_est + wind_est
-
-        return {
-            "solar_power": round(solar_est, 2),
-            "wind_power": round(wind_est, 2),
-            "total_power": round(total_est, 2),
-            "recommended_source": "Solar & Wind (Fallback)" if total_est > 0 else "Grid",
-            "optimal_dispatch": {
-                "solar_kw": round(solar_est, 2),
-                "wind_kw": round(wind_est, 2),
-                "battery_kw": 0.0,
-                "grid_kw": max(0.0, load_kw - total_est),
-            },
-            "is_fallback": True,
-        }
-
-    async def chat(self, prompt: str) -> str:
-        """Request POST /chat from RAG AI Assistant."""
+    async def chat(self, prompt: str) -> Optional[str]:
+        """
+        Advisor reply via POST /chat, or None if the request failed (reason in
+        last_http_error). It used to return a canned line in the advisor's
+        voice claiming "local mode" still worked — there is no local mode.
+        """
         url = f"{state.api_base_url}/chat"
         # ChatRequest is {query, lang}; sending {message, user_id} made every
-        # request fail validation with 422, so the advisor screen only ever
-        # showed the offline fallback below.
+        # request fail validation with 422.
         payload = {"query": prompt, "lang": state.lang}
-        res = await asyncio.to_thread(_http_post_sync, url, payload, 15.0)
-        if res and isinstance(res, dict):
-            return res.get("response") or res.get("reply") or "No response from assistant."
-
-        return (
-            "EcoPredict AI: Негізгі сервер уақытша офлайн. "
-            "Бірақ жергілікті режимде барлық есептеулер жұмыс істейді!"
-        )
+        res = await asyncio.to_thread(_http_post_sync, url, payload, 30.0)
+        if isinstance(res, dict):
+            return res.get("response") or res.get("reply") or ""
+        return None
 
     async def get_weather(self) -> Optional[Dict[str, Any]]:
         """Current Turkistan conditions (GET /solarman/weather)."""
@@ -399,22 +392,70 @@ class APIClient:
                 return forecasts
         return None
 
-    async def get_solarman_live(self, device_sn: str = "") -> Dict[str, Any]:
-        """Fetch Solarman live plant telemetry for a specific inverter SN."""
+    async def get_solarman_live(self, device_sn: str = "") -> Optional[Dict[str, Any]]:
+        """
+        Solarman telemetry for one inverter SN, or None if the request failed.
+
+        demo=true lets the server fall back to its sample payload when it has
+        no Solarman credentials. That reply carries source == "demo", and every
+        screen showing it must say so (see is_demo).
+        """
         # /solarman/live is a GET; POSTing to it returned 405 every time, which
         # is why the live telemetry screen never populated.
         url = f"{state.api_base_url}/solarman/live?demo=true"
         if device_sn:
             url += f"&device_sn={device_sn}"
         res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
-        if res and isinstance(res, dict):
-            return res
-        return {
-            "inverter_power_kw": 845.2,
-            "daily_yield_kwh": 3420.5,
-            "ambient_temp_c": 28.5,
-            "status": "Normal Operation",
+        return res if isinstance(res, dict) else None
+
+    @staticmethod
+    def is_demo(live: Optional[Dict[str, Any]]) -> bool:
+        """Whether a /solarman/live reply is the server's sample, not the inverter."""
+        return str((live or {}).get("source", "")).startswith("demo")
+
+    async def get_metrics(self) -> Optional[Dict[str, Any]]:
+        """Model metrics and feature importances (GET /metrics)."""
+        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/metrics", self.timeout)
+        return res if isinstance(res, dict) else None
+
+    async def sustainability_impact(
+        self,
+        renewable_kwh: float,
+        grid_import_kwh: float,
+        grid_factor_kg_per_kwh: float = 0.45,
+    ) -> Optional[Dict[str, Any]]:
+        """CO₂ avoided and equivalents (POST /sustainability/impact)."""
+        payload = {
+            "renewable_kwh": renewable_kwh,
+            "grid_import_kwh": grid_import_kwh,
+            "grid_factor_kg_per_kwh": grid_factor_kg_per_kwh,
+            "lang": state.lang,
         }
+        res = await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/sustainability/impact", payload, self.timeout
+        )
+        return res if isinstance(res, dict) else None
+
+    async def microgrid_day(
+        self,
+        num_panels: int,
+        battery_kwh: float,
+        load_kw: float,
+        inverter_kw: float,
+        weather: str = "sample",
+    ) -> Optional[Dict[str, Any]]:
+        """24 h PV/battery/grid lab simulation (POST /labs/microgrid-day)."""
+        payload = {
+            "num_panels": int(num_panels),
+            "battery_kwh": battery_kwh,
+            "load_kw": load_kw,
+            "inverter_kw": inverter_kw,
+            "weather": weather,
+        }
+        res = await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/labs/microgrid-day", payload, self.timeout
+        )
+        return res if isinstance(res, dict) else None
 
 
 api_client = APIClient()

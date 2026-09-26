@@ -8,22 +8,24 @@ except (ImportError, ModuleNotFoundError):
 def build_learn_view(page: ft.Page) -> ft.Control:
     """Build educational interactive microgrid learning view."""
     c = state.colors
+    t = state.text
 
+    # (title key, body key, colour)
     topics = [
-        ("☀️ Күн Фотовольтаикасы (Solar PV Physics)", "Күн радиациясын P-N өткелі арқылы тікелей тұрақты токқа (DC) айналдыру физикалық негіздері. Панель тиімділігі температураның әр 1°C көтерілуіне ~0.4%-ға төмендейді.", c["accent"]),
-        ("💨 Жел Турбиналары (Wind Aerodynamics)", "Жел ағынының кинетикалық энергиясын турбина қалақшалары арқылы айналмалы механикалық қуатқа және генератор арқылы айнымалы токқа (AC) түрлендіру.", c["secondary"]),
-        ("🔋 Батарея Жүйелері (BESS Energy Storage)", "Литий-иондық батареялар арқылы пиктік жүктемені тегістеу және энергияны оңтайлы сақтау. Батареяның зарядталу деңгейі (SOC) микрожелі тұрақтылығын сақтайды.", c["success"]),
-        ("⚡ Оңтайлы Диспетчерлеу (Microgrid Dispatch)", "LCOE (Энергияның келтірілген құны) негізінде ең арзан және экологиялық таза генерация көзін таңдайтын алгоритмдік диспетчерлік оңтайландыру.", c["primary"]),
+        ("learn_pv_title", "learn_pv_body", c["accent"]),
+        ("learn_wind_title", "learn_wind_body", c["secondary"]),
+        ("learn_bess_title", "learn_bess_body", c["success"]),
+        ("learn_dispatch_title", "learn_dispatch_body", c["primary"]),
     ]
 
     cards = []
-    for title, desc, color in topics:
+    for title_key, body_key, color in topics:
         cards.append(
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Row([ft.Icon(ft.Icons.SCHOOL, color=color, size=20), ft.Text(title, size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"])]),
-                        ft.Text(desc, size=12, color=c["text_secondary"]),
+                        ft.Row([ft.Icon(ft.Icons.SCHOOL, color=color, size=20), ft.Text(t(title_key), size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"])]),
+                        ft.Text(t(body_key), size=12, color=c["text_secondary"]),
                     ],
                     spacing=6,
                 ),
@@ -36,9 +38,10 @@ def build_learn_view(page: ft.Page) -> ft.Control:
 
     return ft.ListView(
         controls=[
-            ft.Text("📚 ЖЭК және Микрожелі Оқыту Модулі", size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("learn_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             *cards,
         ],
         spacing=12,
         padding=12,
+        expand=True,
     )

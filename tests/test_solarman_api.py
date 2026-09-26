@@ -212,8 +212,32 @@ class TestSolarmanAPI(unittest.TestCase):
         self.assertFalse(data["is_faulty"])
         self.assertIn("OFFLINE", data["alert_message"])
 
+    @staticmethod
+    def _hourly_weather(hours=24):
+        """A day of WeatherAPI-shaped records, so the test needs no network or key."""
+        return {
+            "source": "weatherapi",
+            "forecast": [
+                {
+                    "time": f"2026-07-11T{h:02d}:00",
+                    "temperature": 20.0 + h * 0.5,
+                    "cloud_cover": 30.0,
+                    "shortwave_radiation": 800.0 if 8 <= h <= 18 else 0.0,
+                    "uv_index": 5.0 if 8 <= h <= 18 else 0.0,
+                }
+                for h in range(hours)
+            ],
+        }
+
     def test_forecast_endpoint(self):
-        response = self.client.get("/solarman/forecast?dc_capacity_kwp=50.0")
+        # CI runs with WEATHERAPI_KEY unset, and the route rightly refuses to
+        # forecast from missing weather — so feed it a known day instead of
+        # depending on the live WeatherAPI.
+        with mock.patch(
+            "src.utils.solarman_processor.SolarmanProcessor.fetch_turkistan_hourly_forecast",
+            return_value=self._hourly_weather(),
+        ):
+            response = self.client.get("/solarman/forecast?dc_capacity_kwp=50.0")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         
@@ -224,6 +248,14 @@ class TestSolarmanAPI(unittest.TestCase):
         self.assertIn("predicted_power_kw", first_hour)
         self.assertIn("cloud_cover", first_hour)
         self.assertIn("temperature", first_hour)
+
+    def test_forecast_endpoint_reports_missing_weather(self):
+        # Without weather the mobile 24h screen must say why, not chart a
+        # made-up curve — the route returns an error carrying the cause.
+        with mock.patch.dict(os.environ, {"WEATHERAPI_KEY": "", "WEATHER_API_KEY": ""}):
+            response = self.client.get("/solarman/forecast?dc_capacity_kwp=50.0")
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("WEATHERAPI_KEY", response.json()["detail"])
 
 if __name__ == "__main__":
     unittest.main()

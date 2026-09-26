@@ -799,3 +799,10 @@ def get_solarman_generation_forecast(dc_capacity_kwp: float = 50.0):
     except Exception as e:
         logger.error(f"Error in solarman forecast endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# Mobile Training / Sustainability / Labs screens (GET /metrics,
+# POST /sustainability/impact, POST /labs/microgrid-day). Included at the end
+# so every app that mounts this router (api/main.py, root main.py) gets them.
+from api.insights import router as insights_router  # noqa: E402
+
+router.include_router(insights_router)

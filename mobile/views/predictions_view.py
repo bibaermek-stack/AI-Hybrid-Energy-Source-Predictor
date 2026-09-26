@@ -1,16 +1,18 @@
-import asyncio
 import flet as ft
 try:
     from mobile.state import state
     from mobile.api_client import api_client
+    from mobile import api_client as api_client_module
 except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
+    import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
 
 
 def build_predictions_view(page: ft.Page) -> ft.Control:
     """Build interactive ML predictions view with power curve visualization."""
     c = state.colors
+    t = state.text
 
     # Labels
     txt_irrad = ft.Text(f"{state.irradiation:.0f} W/m²", size=11, weight=ft.FontWeight.BOLD, color=c["primary"])
@@ -18,11 +20,12 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
     txt_module = ft.Text(f"{state.module_temp:.0f} °C", size=11, weight=ft.FontWeight.BOLD, color=c["primary"])
     txt_wind_spd = ft.Text(f"{state.wind_speed:.1f} m/s", size=11, weight=ft.FontWeight.BOLD, color=c["primary"])
 
-    # Output text
-    txt_solar = ft.Text("420.5 kW", size=20, weight=ft.FontWeight.BOLD, color=c["accent"])
-    txt_wind = ft.Text("400.1 kW", size=20, weight=ft.FontWeight.BOLD, color=c["secondary"])
-    txt_total = ft.Text("820.6 kW", size=24, weight=ft.FontWeight.BOLD, color=c["primary"])
-    txt_rec = ft.Text("💡 Ұсыныс: Күн + Жел аралас өндірісі оңтайлы", size=12, weight=ft.FontWeight.W_600, color=c["text_primary"])
+    # Output text — placeholders until the model answers. These used to start
+    # at 420.5 / 400.1 / 820.6 kW, which read as a result before any request.
+    txt_solar = ft.Text("—", size=20, weight=ft.FontWeight.BOLD, color=c["accent"])
+    txt_wind = ft.Text("—", size=20, weight=ft.FontWeight.BOLD, color=c["secondary"])
+    txt_total = ft.Text("—", size=24, weight=ft.FontWeight.BOLD, color=c["primary"])
+    txt_rec = ft.Text(t("pred_recommendation", source="—"), size=12, weight=ft.FontWeight.W_600, color=c["text_primary"])
     progress_ring = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2, color="#FFFFFF")
 
     # Sliders
@@ -39,10 +42,12 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
         progress_ring.visible = True
         page.update()
 
-        state.irradiation = sl_irrad.value or 900.0
-        state.ambient_temp = sl_temp.value or 30.0
-        state.module_temp = sl_module.value or 38.0
-        state.wind_speed = sl_wind_spd.value or 6.5
+        # `is not None`, not `or`: 0 W/m² or 0 m/s are real inputs (night, calm)
+        # and `or` silently replaced them with the defaults.
+        state.irradiation = float(sl_irrad.value if sl_irrad.value is not None else 900.0)
+        state.ambient_temp = float(sl_temp.value if sl_temp.value is not None else 30.0)
+        state.module_temp = float(sl_module.value if sl_module.value is not None else 38.0)
+        state.wind_speed = float(sl_wind_spd.value if sl_wind_spd.value is not None else 6.5)
 
         res = await api_client.predict(
             irradiation=state.irradiation,
@@ -56,31 +61,36 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
             theoretical=state.theoretical_power,
         )
 
-        s_val = float(res.get('solar_power', 420.5))
-        w_val = float(res.get('wind_power', 400.1))
-        t_val = float(res.get('total_power', s_val + w_val))
+        progress_ring.visible = False
+        if res is None:
+            reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
+            txt_solar.value = txt_wind.value = txt_total.value = "—"
+            txt_rec.value = t("pred_err_no_answer", reason=reason)
+            txt_rec.color = c["error"]
+            bar_solar.width = bar_wind.width = 0
+            page.update()
+            return
+
+        s_val = float(res.get("solar_power") or 0.0)
+        w_val = float(res.get("wind_power") or 0.0)
+        # PredictionResponse calls the sum total_energy (there is no total_power).
+        t_val = float(res.get("total_energy") or (s_val + w_val))
 
         txt_solar.value = f"{s_val:.1f} kW"
         txt_wind.value = f"{w_val:.1f} kW"
         txt_total.value = f"{t_val:.1f} kW"
+        txt_rec.value = t("pred_recommendation", source=res.get("recommended_source", "—"))
+        txt_rec.color = c["text_primary"]
 
         # Update bar widths proportionally
         max_p = max(100.0, t_val)
         bar_solar.width = min(220.0, max(20.0, (s_val / max_p) * 220))
         bar_wind.width = min(220.0, max(20.0, (w_val / max_p) * 220))
-
-        progress_ring.visible = False
         page.update()
 
-    try:
-        loop = asyncio.get_running_loop()
-        loop.create_task(run_prediction(None))
-    except RuntimeError:
-        pass
-
-    btn_calc = ft.ElevatedButton(
+    btn_calc = ft.Button(
         content=ft.Row(
-            [ft.Icon(ft.Icons.AUTO_AWESOME, color="#FFFFFF"), ft.Text("ML Болжам жасау", color="#FFFFFF", weight=ft.FontWeight.BOLD), progress_ring],
+            [ft.Icon(ft.Icons.AUTO_AWESOME, color="#FFFFFF"), ft.Text(t("pred_btn"), color="#FFFFFF", weight=ft.FontWeight.BOLD), progress_ring],
             alignment=ft.MainAxisAlignment.CENTER,
             spacing=8,
         ),
@@ -88,18 +98,18 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
         on_click=run_prediction,
     )
 
-    return ft.ListView(
+    view = ft.ListView(
         controls=[
-            ft.Text("⚡ ML Энергия Болжау Сервисі", size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
+            ft.Text(t("pred_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Row([ft.Icon(ft.Icons.WB_SUNNY, color=c["accent"]), ft.Text("Күн Батареясы Тізімі", weight=ft.FontWeight.BOLD)]),
-                        ft.Row([ft.Text("Радиация:"), txt_irrad], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Icon(ft.Icons.WB_SUNNY, color=c["accent"]), ft.Text(t("pred_solar_section"), weight=ft.FontWeight.BOLD)]),
+                        ft.Row([ft.Text(t("pred_irradiance")), txt_irrad], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_irrad,
-                        ft.Row([ft.Text("Ауа темп.:"), txt_temp], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_ambient")), txt_temp], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_temp,
-                        ft.Row([ft.Text("Панель темп.:"), txt_module], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_module")), txt_module], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_module,
                     ],
                     spacing=4,
@@ -112,8 +122,8 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Row([ft.Icon(ft.Icons.AIR, color=c["secondary"]), ft.Text("Жел Генераторы", weight=ft.FontWeight.BOLD)]),
-                        ft.Row([ft.Text("Жел жылдамдығы:"), txt_wind_spd], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Icon(ft.Icons.AIR, color=c["secondary"]), ft.Text(t("pred_wind_section"), weight=ft.FontWeight.BOLD)]),
+                        ft.Row([ft.Text(t("pred_wind_speed")), txt_wind_spd], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         sl_wind_spd,
                     ],
                     spacing=4,
@@ -127,12 +137,13 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text("Болжалған Тәуліктік Өндіріс:", size=12, color=c["text_secondary"]),
+                        # Instantaneous kW for the inputs above, not a daily total.
+                        ft.Text(t("pred_total_label"), size=12, color=c["text_secondary"]),
                         txt_total,
                         ft.Divider(height=1, color=c["card_border"]),
-                        ft.Row([ft.Text("☀️ Күн қуаты:"), txt_solar], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_solar_power")), txt_solar], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         bar_solar,
-                        ft.Row([ft.Text("💨 Жел қуаты:"), txt_wind], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Row([ft.Text(t("pred_wind_power")), txt_wind], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                         bar_wind,
                         ft.Container(height=4),
                         txt_rec,
@@ -147,4 +158,9 @@ def build_predictions_view(page: ft.Page) -> ft.Control:
         ],
         spacing=12,
         padding=12,
+        expand=True,
     )
+    # Run when the tab is opened (on_nav_change in main.py) rather than while
+    # main() is still building every view — that raced the splash transition.
+    view.data = run_prediction
+    return view
