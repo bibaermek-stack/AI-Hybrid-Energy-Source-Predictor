@@ -17,3 +17,7 @@ with $0 \le SOC \le 1$ (or DoD floor $SOC_{\min} = 1-\mathrm{DoD}$).
 1. $E_{cap}=40\,\mathrm{kWh}$, $SOC_0=0.5$, charge $P_{ch}=10\,\mathrm{kW}$ for $1\,\mathrm{h}$ at $\eta=0.95$. Find $SOC_1$.
 2. Same battery, discharge $8\,\mathrm{kW}$ for $1\,\mathrm{h}$. New SOC?
 3. With $\mathrm{DoD}=0.8$, what is the minimum allowed $SOC$?
+
+## DoD in this lab
+The battery never discharges below $SOC_{\min} = 1-\mathrm{DoD}$ (the dashed line on the SOC chart).
+Try DoD = 1.0 and DoD = 0.5 with the same PV and load and compare the evening grid import.

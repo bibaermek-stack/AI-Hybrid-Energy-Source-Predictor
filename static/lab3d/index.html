@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>EcoPredict · 3D inverter lab</title>
+  <link rel="stylesheet" href="lab3d.css" />
+</head>
+<body>
+  <div id="app">
+    <div id="stage">
+      <canvas id="c" aria-label="3D model"></canvas>
+      <div id="overlays"></div>
+      <div id="loading"><div class="spin"></div><div id="loadmsg">…</div></div>
+      <div id="glerror" hidden></div>
+      <div id="hint"></div>
+    </div>
+    <aside id="panel">
+      <nav id="tabs" role="tablist">
+        <button data-mode="explore" role="tab"></button>
+        <button data-mode="fix" role="tab"></button>
+        <button data-mode="test" role="tab"></button>
+      </nav>
+      <section id="body"></section>
+    </aside>
+  </div>
+  <script type="module" src="lab3d.js"></script>
+</body>
+</html>

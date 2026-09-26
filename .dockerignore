@@ -7,6 +7,8 @@
 .idea
 *.md
 !README.md
+# Lab theory is markdown the app serves (src/education/labs/theory.py)
+!src/education/content/**/*.md
 
 # Python
 __pycache__

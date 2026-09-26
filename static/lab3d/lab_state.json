@@ -1,0 +1,1178 @@
+{
+ "controls": {
+  "ac_isolator": {
+   "label": {
+    "en": "AC isolator",
+    "kk": "AC ажыратқыш"
+   },
+   "part": "ac_isolator",
+   "states": [
+    {
+     "en": "ON (I)",
+     "id": "on",
+     "kk": "ҚОСУЛЫ (I)"
+    },
+    {
+     "en": "OFF (0)",
+     "id": "off",
+     "kk": "АЖЫРАТЫЛҒАН (0)"
+    }
+   ]
+  },
+  "ac_ln": {
+   "label": {
+    "en": "AC terminals L / N",
+    "kk": "AC клеммалары L / N"
+   },
+   "part": "ac_isolator",
+   "states": [
+    {
+     "en": "L → grid L, N → grid N",
+     "id": "ok",
+     "kk": "L → желі L, N → желі N"
+    },
+    {
+     "en": "L and N swapped",
+     "id": "swapped",
+     "kk": "L мен N ауысқан"
+    }
+   ]
+  },
+  "dc_isolator": {
+   "label": {
+    "en": "PV array DC isolator",
+    "kk": "PV массивінің DC ажыратқышы"
+   },
+   "part": "dc_isolator",
+   "states": [
+    {
+     "en": "ON (I)",
+     "id": "on",
+     "kk": "ҚОСУЛЫ (I)"
+    },
+    {
+     "en": "OFF (0)",
+     "id": "off",
+     "kk": "АЖЫРАТЫЛҒАН (0)"
+    }
+   ]
+  },
+  "dc_polarity": {
+   "label": {
+    "en": "DC cables on the inverter inputs",
+    "kk": "Инвертор кірістеріндегі DC кабельдер"
+   },
+   "part": "dc_inputs",
+   "states": [
+    {
+     "en": "PV+ → DC+, PV− → DC−",
+     "id": "ok",
+     "kk": "PV+ → DC+, PV− → DC−"
+    },
+    {
+     "en": "PV+ → DC−, PV− → DC+ (reversed)",
+     "id": "reversed",
+     "kk": "PV+ → DC−, PV− → DC+ (кері)"
+    }
+   ]
+  },
+  "logger": {
+   "label": {
+    "en": "Wi-Fi data logger (COM port)",
+    "kk": "Wi-Fi деректер логгері (COM порт)"
+   },
+   "part": "logger",
+   "states": [
+    {
+     "en": "Plugged in",
+     "id": "seated",
+     "kk": "Қосылған"
+    },
+    {
+     "en": "Pulled out",
+     "id": "loose",
+     "kk": "Суырылған"
+    }
+   ]
+  },
+  "pe": {
+   "label": {
+    "en": "Protective earth (PE)",
+    "kk": "Қорғаныстық жерге қосу (PE)"
+   },
+   "part": "ac_isolator",
+   "states": [
+    {
+     "en": "Connected to the earth bar",
+     "id": "connected",
+     "kk": "Жер шинасына қосылған"
+    },
+    {
+     "en": "Not connected",
+     "id": "open",
+     "kk": "Қосылмаған"
+    }
+   ]
+  }
+ },
+ "correct": {
+  "ac_isolator": "on",
+  "ac_ln": "ok",
+  "dc_isolator": "on",
+  "dc_polarity": "ok",
+  "logger": "seated",
+  "pe": "connected"
+ },
+ "order": [
+  "dc_isolator",
+  "dc_polarity",
+  "ac_isolator",
+  "ac_ln",
+  "pe",
+  "logger"
+ ],
+ "scenarios": {
+  "ac_isolator_off": {
+   "initial": {
+    "ac_isolator": "off",
+    "ac_ln": "ok",
+    "dc_isolator": "on",
+    "dc_polarity": "ok",
+    "logger": "seated",
+    "pe": "connected"
+   },
+   "story": {
+    "en": "The panels produce, the inverter screen is lit, but the meter does not count.",
+    "kk": "Панельдер өндіреді, инвертор экраны жанып тұр, бірақ есептегіш санамайды."
+   },
+   "title": {
+    "en": "Fault C — AC isolator left OFF",
+    "kk": "Ақау C — AC ажыратқыш ажыратулы қалған"
+   }
+  },
+  "compound": {
+   "initial": {
+    "ac_isolator": "on",
+    "ac_ln": "swapped",
+    "dc_isolator": "off",
+    "dc_polarity": "reversed",
+    "logger": "loose",
+    "pe": "connected"
+   },
+   "story": {
+    "en": "A rushed installation: find and fix every fault before the plant can export.",
+    "kk": "Асығыс монтаж: станция желіге қуат беруі үшін барлық ақауды тауып, түзетіңіз."
+   },
+   "title": {
+    "en": "Exam — several faults at once",
+    "kk": "Емтихан — бірнеше ақау бірден"
+   }
+  },
+  "dc_isolator_off": {
+   "initial": {
+    "ac_isolator": "on",
+    "ac_ln": "ok",
+    "dc_isolator": "off",
+    "dc_polarity": "ok",
+    "logger": "seated",
+    "pe": "connected"
+   },
+   "story": {
+    "en": "A technician isolated the array for an inspection and forgot to switch it back.",
+    "kk": "Техник тексеру үшін массивті ажыратып, қайта қосуды ұмытқан."
+   },
+   "title": {
+    "en": "Fault B — DC isolator left OFF",
+    "kk": "Ақау B — DC ажыратқыш ажыратулы қалған"
+   }
+  },
+  "healthy": {
+   "initial": {
+    "ac_isolator": "on",
+    "ac_ln": "ok",
+    "dc_isolator": "on",
+    "dc_polarity": "ok",
+    "logger": "seated",
+    "pe": "connected"
+   },
+   "story": {
+    "en": "Everything is connected correctly. Look at what a working plant shows.",
+    "kk": "Барлығы дұрыс қосылған. Жұмыс істеп тұрған станция не көрсететінін қараңыз."
+   },
+   "title": {
+    "en": "Reference — healthy system",
+    "kk": "Үлгі — сау жүйе"
+   }
+  },
+  "logger_loose": {
+   "initial": {
+    "ac_isolator": "on",
+    "ac_ln": "ok",
+    "dc_isolator": "on",
+    "dc_polarity": "ok",
+    "logger": "loose",
+    "pe": "connected"
+   },
+   "story": {
+    "en": "The plant owner says the app shows no data since yesterday. The meter is counting.",
+    "kk": "Иесі кешеден бері қосымшада дерек жоқ дейді. Есептегіш санап тұр."
+   },
+   "title": {
+    "en": "Fault F — monitoring offline",
+    "kk": "Ақау F — мониторинг офлайн"
+   }
+  },
+  "pe_open": {
+   "initial": {
+    "ac_isolator": "on",
+    "ac_ln": "ok",
+    "dc_isolator": "on",
+    "dc_polarity": "ok",
+    "logger": "seated",
+    "pe": "open"
+   },
+   "story": {
+    "en": "The PE conductor was left off the earth bar after the AC isolator was replaced.",
+    "kk": "AC ажыратқышты ауыстырғаннан кейін PE сымы жер шинасына қосылмай қалған."
+   },
+   "title": {
+    "en": "Fault E — earth not connected",
+    "kk": "Ақау E — жерге қосу жоқ"
+   }
+  },
+  "reversed_dc": {
+   "initial": {
+    "ac_isolator": "on",
+    "ac_ln": "ok",
+    "dc_isolator": "on",
+    "dc_polarity": "reversed",
+    "logger": "seated",
+    "pe": "connected"
+   },
+   "story": {
+    "en": "After the panels were cleaned the DC plugs went back the wrong way round: PV+ now lands on the inverter's DC− input.",
+    "kk": "Панельдерді тазалағаннан кейін DC ашалары кері қосылған: PV+ инвертордың DC− кірісіне түскен."
+   },
+   "title": {
+    "en": "Fault A — reversed DC polarity",
+    "kk": "Ақау A — DC полярлығы кері"
+   }
+  },
+  "swapped_ac": {
+   "initial": {
+    "ac_isolator": "on",
+    "ac_ln": "swapped",
+    "dc_isolator": "on",
+    "dc_polarity": "ok",
+    "logger": "seated",
+    "pe": "connected"
+   },
+   "story": {
+    "en": "An electrician replaced the AC isolator and landed line and neutral on the wrong terminals.",
+    "kk": "Электрик AC ажыратқышты ауыстырып, фаза мен нөлді қате клеммаларға қосқан."
+   },
+   "title": {
+    "en": "Fault D — AC L and N swapped",
+    "kk": "Ақау D — AC L мен N ауысқан"
+   }
+  }
+ },
+ "status": {
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=off,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": false,
+   "code": "NO_PV",
+   "display": {
+    "en": "No PV input · Vpv 0 V",
+    "kk": "PV кірісі жоқ · Vpv 0 V"
+   },
+   "exporting": false,
+   "inverter_on": false,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 0
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "GRID_LOST",
+   "display": {
+    "en": "Grid lost · Vac 0 V",
+    "kk": "Желі жоқ · Vac 0 V"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "GRID_LOST",
+   "display": {
+    "en": "Grid lost · Vac 0 V",
+    "kk": "Желі жоқ · Vac 0 V"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "GRID_LOST",
+   "display": {
+    "en": "Grid lost · Vac 0 V",
+    "kk": "Желі жоқ · Vac 0 V"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "GRID_LOST",
+   "display": {
+    "en": "Grid lost · Vac 0 V",
+    "kk": "Желі жоқ · Vac 0 V"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=off,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "OK",
+   "display": {
+    "en": "Exporting · Pac 3.2 kW",
+    "kk": "Желіге беруде · Pac 3.2 kW"
+   },
+   "exporting": true,
+   "inverter_on": true,
+   "meter_running": true,
+   "pac_kw": 3.2,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "OK",
+   "display": {
+    "en": "Exporting · Pac 3.2 kW",
+    "kk": "Желіге беруде · Pac 3.2 kW"
+   },
+   "exporting": true,
+   "inverter_on": true,
+   "meter_running": true,
+   "pac_kw": 3.2,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "GRID_LN",
+   "display": {
+    "en": "Grid fault: L/N",
+    "kk": "Желі ақауы: L/N"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "GRID_LN",
+   "display": {
+    "en": "Grid fault: L/N",
+    "kk": "Желі ақауы: L/N"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=ok,ac_isolator=on,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "EARTH_FAULT",
+   "display": {
+    "en": "Insulation / earth fault",
+    "kk": "Оқшаулау / жерге қосу ақауы"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=off,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 0,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=ok,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=connected,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=connected,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=open,logger=loose": {
+   "cloud_online": false,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  },
+  "dc_isolator=on,dc_polarity=reversed,ac_isolator=on,ac_ln=swapped,pe=open,logger=seated": {
+   "cloud_online": true,
+   "code": "DC_POLARITY",
+   "display": {
+    "en": "DC polarity error",
+    "kk": "DC полярлық қатесі"
+   },
+   "exporting": false,
+   "inverter_on": true,
+   "meter_running": false,
+   "pac_kw": 0.0,
+   "vac": 230,
+   "vpv": 412
+  }
+ }
+}
