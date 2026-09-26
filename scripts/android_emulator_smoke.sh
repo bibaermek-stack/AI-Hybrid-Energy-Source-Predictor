@@ -22,6 +22,8 @@ pass() { echo "PASS: $*"; }
 fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb exec-out cat /sdcard/ui.xml > "$OUT/$1.xml"; }
 in_front() { adb shell dumpsys window | grep -E "mCurrentFocus=|mFocusedApp=" | grep -q "$PKG"; }
+# Visible labels of a saved UI dump, one per line (for evidence in the log).
+labels_of() { grep -oE '(text|content-desc)="[^"]+"' "$OUT/$1.xml" | sed -E 's/^[a-z-]+="//; s/"$//' | tr '\n' '|' ; echo; }
 launch() {
   adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
   # Python start-up plus the splash and first health check take a while on
@@ -54,7 +56,13 @@ shot 02_forecast
 adb shell input keyevent KEYCODE_BACK
 sleep 4
 shot 03_after_back_from_forecast
-if in_front; then pass "Back on Forecast kept the app open"; else fail "Back on Forecast closed the app"; fi
+if in_front && grep -q "ЭкоЭнергия" "$OUT/03_after_back_from_forecast.xml"; then
+  pass "Back on Forecast returned Home"
+elif in_front; then
+  fail "Back on Forecast kept the app open but did not show Home"
+else
+  fail "Back on Forecast closed the app"
+fi
 
 # 3. Back from a More screen -> More
 tap_tab "Тағы" 4
@@ -88,10 +96,22 @@ if launch; then
   if $UI tap "Камера" --prefix; then
     sleep 10
     shot 07_camera_preview
-    $UI tap "Түсіру" --prefix || echo "NOTE: Capture button not found"
-    sleep 25
-    shot 08_after_capture
-    echo "CAMERA: see 07_camera_preview.png / 08_after_capture.png"
+    echo "camera screen: $(labels_of 07_camera_preview)"
+    if grep -q "Камера ашылмады" "$OUT/07_camera_preview.xml"; then
+      fail "camera did not open"
+    else
+      $UI tap "Түсіру" --prefix || echo "NOTE: Capture button not found"
+      sleep 25
+      shot 08_after_capture
+      echo "after capture: $(labels_of 08_after_capture)"
+      if grep -qE "Анықталды|Ақау табылмады" "$OUT/08_after_capture.xml"; then
+        pass "camera capture went through YOLO and got an answer"
+      elif grep -q "Диагноз орындалмады" "$OUT/08_after_capture.xml"; then
+        echo "NOTE: capture uploaded but the server did not diagnose it (see labels above)"
+      else
+        echo "NOTE: no diagnosis on screen after capture (see labels above)"
+      fi
+    fi
   else
     echo "NOTE: Camera button not found"
     shot 07_no_camera_button
