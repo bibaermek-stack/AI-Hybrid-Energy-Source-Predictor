@@ -10,6 +10,10 @@
 #
 # flet build installs the Flutter SDK version it requires (--yes); do not add a
 # separate Flutter setup step — a mismatched Flutter makes the build fail.
+#
+# The emulator-test job then installs that APK on an Android 14 emulator and
+# drives it with adb (scripts/android_emulator_smoke.sh): launch, Back from a
+# tab and from a More screen, Back on Home, camera. Screenshots are uploaded.
 
 name: Build Android (Flet)
 
@@ -21,6 +25,7 @@ on:
     paths:
       - "mobile/**"
       - ".github/workflows/build-android.yml"
+      - "scripts/android_*"
 
 concurrency:
   group: android-${{ github.ref }}
@@ -87,4 +92,49 @@ jobs:
           name: EcoPredict-AI-Android-AAB
           path: mobile/build/aab/
           if-no-files-found: error
+          retention-days: 14
+
+  emulator-test:
+    name: Emulator smoke test (launch, Back, camera)
+    needs: build-android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: EcoPredict-AI-Android-APK
+          path: mobile/build/apk/
+
+      # Hardware acceleration for the x86_64 emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run on Android 14 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          OUT: emulator-artifacts
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated
+          # The action runs `script` line by line, so keep it to one command.
+          script: bash scripts/android_emulator_smoke.sh
+
+      - name: Upload screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: EcoPredict-AI-Android-emulator
+          path: emulator-artifacts/
+          if-no-files-found: warn
           retention-days: 14
