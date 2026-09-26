@@ -190,7 +190,7 @@ def render_lab_tasks_panel(
                         "Зертхана орындалды деп белгіленді (барлық тапсырма дұрыс).",
                     )
                 )
-        else:
+        elif require_all_for_lab:
             left = prog["total"] - prog["done"]
             st.warning(
                 _t(

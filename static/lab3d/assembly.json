@@ -1,0 +1,161 @@
+{
+  "source": "Solar Inverter Subsystem — CAD assembly (OBJ export); materials re-assigned for the lab",
+  "units": "m",
+  "meshes": [
+    {
+      "file": "model_4.obj",
+      "part": "dc_isolator",
+      "texture": "dc_isolator_label.png"
+    },
+    {
+      "file": "model_7.obj",
+      "part": "dc_isolator",
+      "texture": "isolator_face.png"
+    },
+    {
+      "file": "model_6.obj",
+      "part": "dc_isolator",
+      "color": "#4b5563",
+      "role": "dc_handle"
+    },
+    {
+      "file": "model_5.obj",
+      "part": "dc_isolator",
+      "color": "#6b7280"
+    },
+    {
+      "file": "model_1.obj",
+      "part": "dc_cables",
+      "color": "#2f343c"
+    },
+    {
+      "file": "model_3.obj",
+      "part": "dc_inputs",
+      "color": "#2563eb",
+      "role": "dc_neg_tag"
+    },
+    {
+      "file": "model_2.obj",
+      "part": "dc_inputs",
+      "color": "#dc2626",
+      "role": "dc_pos_tag"
+    },
+    {
+      "file": "model_11.obj",
+      "part": "inverter",
+      "texture": "inverter.png"
+    },
+    {
+      "file": "model_12.obj",
+      "part": "ac_cable",
+      "color": "#8a919c"
+    },
+    {
+      "file": "model_0.obj",
+      "part": "ac_isolator",
+      "texture": "isolator_face.png"
+    },
+    {
+      "file": "model_8.obj",
+      "part": "generation_meter",
+      "texture": "meter.png"
+    },
+    {
+      "file": "model_9.obj",
+      "part": "generation_meter",
+      "color": "#9ec7a8",
+      "role": "meter_display"
+    },
+    {
+      "file": "model_10.obj",
+      "part": "generation_meter",
+      "color": "#f59e0b",
+      "role": "meter_led"
+    }
+  ],
+  "parts": {
+    "dc_isolator": {
+      "name": {
+        "en": "PV array DC isolator",
+        "kk": "PV массивінің DC ажыратқышы"
+      },
+      "info": {
+        "en": "A load-break switch between the PV string and the inverter. Turned to 0 (OFF) it disconnects the array so the inverter can be worked on. Its label warns that it contains live parts during daylight: the cables from the panels are live whenever the sun shines.",
+        "kk": "PV тізбегі мен инвертор арасындағы жүктемемен ажырататын ажыратқыш. 0 (OFF) күйіне бұрағанда массив ажыратылады, инверторда жұмыс істеуге болады. Жапсырмасы күндіз ішінде кернеу бар екенін ескертеді: күн түсіп тұрса, панельдерден келетін кабельдерде кернеу болады."
+      }
+    },
+    "dc_cables": {
+      "name": {
+        "en": "DC cables PV+ / PV−",
+        "kk": "DC кабельдер PV+ / PV−"
+      },
+      "info": {
+        "en": "Two single-core cables from the isolator to the inverter, ending in MC4 plugs. Never pull the plugs under load: the inverter's own label says to switch the AC supply off first.",
+        "kk": "Ажыратқыштан инверторға баратын екі бір талсымды кабель, ұштарында MC4 ашалары. Ашаларды жүктеме астында суыруға болмайды: инвертордың жапсырмасы алдымен AC қоректі ажыратуды талап етеді."
+      }
+    },
+    "dc_inputs": {
+      "name": {
+        "en": "Inverter DC inputs (DC− / DC+)",
+        "kk": "Инвертордың DC кірістері (DC− / DC+)"
+      },
+      "info": {
+        "en": "Where the PV cables plug into the inverter: DC− (blue tag) and DC+ (red tag). PV+ must land on DC+. With the cables reversed the inverter's reverse-polarity protection keeps it off.",
+        "kk": "PV кабельдері инверторға қосылатын орын: DC− (көк белгі) және DC+ (қызыл белгі). PV+ DC+-ке қосылуы тиіс. Кабельдер кері қосылса, инвертордың кері полярлықтан қорғанысы оны іске қоспайды."
+      }
+    },
+    "inverter": {
+      "name": {
+        "en": "Grid-tied inverter",
+        "kk": "Желілік инвертор"
+      },
+      "info": {
+        "en": "Converts the direct current from the panels into 230 V alternating current in step with the grid. The display shows the output power (Pac) or the fault that stops it. Its label warns of a dual supply: isolate both AC and DC before work.",
+        "kk": "Панельдердің тұрақты тогын желімен үйлескен 230 В айнымалы токқа түрлендіреді. Экраны шығыс қуатын (Pac) немесе оны тоқтатқан ақауды көрсетеді. Жапсырмасы қос қорек туралы ескертеді: жұмыс алдында AC мен DC екеуін де ажырату керек."
+      }
+    },
+    "ac_cable": {
+      "name": {
+        "en": "AC cable and mounting rail",
+        "kk": "AC кабель және бекіту рельсі"
+      },
+      "info": {
+        "en": "Carries the inverter's output (line L, neutral N and protective earth PE) to the AC isolator and the meter on the rail.",
+        "kk": "Инвертордың шығысын (фаза L, нөл N және қорғаныстық жер PE) рельстегі AC ажыратқыш пен есептегішке жеткізеді."
+      }
+    },
+    "ac_isolator": {
+      "name": {
+        "en": "AC isolator",
+        "kk": "AC ажыратқыш"
+      },
+      "info": {
+        "en": "Disconnects the inverter from the grid. Inside are the L, N and PE terminals of the AC cable. Switched OFF, the inverter sees no grid and will not export.",
+        "kk": "Инверторды желіден ажыратады. Ішінде AC кабелінің L, N және PE клеммалары бар. Ажыратулы тұрса, инвертор желіні көрмейді және қуат бермейді."
+      }
+    },
+    "generation_meter": {
+      "name": {
+        "en": "Generation meter (kWh)",
+        "kk": "Генерация есептегіші (кВт·сағ)"
+      },
+      "info": {
+        "en": "A single-phase watt-hour meter counting the energy the inverter delivers. The LED flashes 1000 times per kWh, so it blinks only while the plant exports.",
+        "kk": "Инвертор берген энергияны санайтын бір фазалы ватт-сағат есептегіші. Жарық диоды әр кВт·сағ сайын 1000 рет жыпылықтайды, яғни станция қуат бергенде ғана жанады."
+      }
+    },
+    "logger": {
+      "name": {
+        "en": "Wi-Fi data logger",
+        "kk": "Wi-Fi деректер логгері"
+      },
+      "info": {
+        "en": "Plugs into the inverter's COM port and sends its data to Solarman / EcoPredict. Not part of the CAD model: added for this lab. Pulled out, the plant still produces but the app goes offline.",
+        "kk": "Инвертордың COM портына қосылып, деректерді Solarman / EcoPredict-ке жібереді. CAD моделінде жоқ: осы зертханаға қосылған. Суырылса, станция өндіре береді, бірақ қосымша офлайн болады."
+      }
+    }
+  },
+  "added_parts": [
+    "logger"
+  ]
+}

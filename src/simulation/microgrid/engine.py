@@ -25,6 +25,7 @@ def run_day_simulation(
     panel: SolarPanelConfig | None = None,
     dt_hours: float = 1.0,
     initial_soc_frac: float = 0.5,
+    min_soc_frac: float = 0.0,
 ) -> pd.DataFrame:
     """
     Run heuristic PV–BESS–grid dispatch over a weather profile.
@@ -51,6 +52,7 @@ def run_day_simulation(
         capacity_kwh=battery_kwh,
         max_charge_kw=max_charge_kw,
         initial_soc_frac=initial_soc_frac,
+        min_soc_frac=min_soc_frac,
     )
     inverter = Inverter(rated_power_kw=inverter_kw)
     balancer = LoadBalancer(inverter, battery)

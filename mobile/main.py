@@ -21,41 +21,82 @@ if str(_ROOT) not in sys.path:
 import flet as ft
 
 try:
-    from mobile.state import state
     from mobile.api_client import api_client
     from mobile.components.header import build_app_header
-    from mobile.components.nav_bar import MORE_KEYS, RAIL_BREAKPOINT, TAB_KEYS, back_target, build_bottom_nav, build_nav_rail, tab_index
-
-    from mobile.views.overview_view import build_overview_view
-    from mobile.views.forecast_hub_view import build_forecast_hub
-    from mobile.views.faults_view import build_faults_view
-    from mobile.views.training_view import build_training_view
-    from mobile.views.learn_view import build_learn_view
-    from mobile.views.optimization_view import build_optimization_view
-    from mobile.views.sustainability_view import build_sustainability_view
-    from mobile.views.labs_view import build_labs_view
+    from mobile.components.nav_bar import (
+        MORE_KEYS,
+        RAIL_BREAKPOINT,
+        TAB_KEYS,
+        back_target,
+        build_bottom_nav,
+        build_nav_rail,
+        tab_index,
+    )
+    from mobile.state import state
     from mobile.views.chat_view import build_chat_view
+    from mobile.views.faults_view import build_faults_view
+    from mobile.views.forecast_hub_view import build_forecast_hub
+    from mobile.views.labs_view import build_labs_view
+    from mobile.views.learn_view import build_learn_view
     from mobile.views.live_view import build_live_view
-    from mobile.views.settings_view import build_settings_view
     from mobile.views.more_view import TITLE_KEYS, build_more_view
+    from mobile.views.optimization_view import build_optimization_view
+    from mobile.views.overview_view import build_overview_view
+    from mobile.views.settings_view import build_settings_view
+    from mobile.views.sustainability_view import build_sustainability_view
+    from mobile.views.training_view import build_training_view
 except (ImportError, ModuleNotFoundError):
-    from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
-    from components.header import build_app_header  # type: ignore # pyright: ignore[reportMissingImports]
-    from components.nav_bar import MORE_KEYS, RAIL_BREAKPOINT, TAB_KEYS, back_target, build_bottom_nav, build_nav_rail, tab_index  # type: ignore # pyright: ignore[reportMissingImports]
-
-    from views.overview_view import build_overview_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.forecast_hub_view import build_forecast_hub  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.faults_view import build_faults_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.training_view import build_training_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.learn_view import build_learn_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.optimization_view import build_optimization_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.sustainability_view import build_sustainability_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.labs_view import build_labs_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.chat_view import build_chat_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.live_view import build_live_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.settings_view import build_settings_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.more_view import TITLE_KEYS, build_more_view  # type: ignore # pyright: ignore[reportMissingImports]
+    from components.header import (
+        build_app_header,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from components.nav_bar import (  # type: ignore # pyright: ignore[reportMissingImports]
+        MORE_KEYS,
+        RAIL_BREAKPOINT,
+        TAB_KEYS,
+        back_target,
+        build_bottom_nav,
+        build_nav_rail,
+        tab_index,
+    )
+    from state import state  # type: ignore # pyright: ignore[reportMissingImports]
+    from views.chat_view import (
+        build_chat_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.faults_view import (
+        build_faults_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.forecast_hub_view import (
+        build_forecast_hub,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.labs_view import (
+        build_labs_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.learn_view import (
+        build_learn_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.live_view import (
+        build_live_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.more_view import (  # type: ignore # pyright: ignore[reportMissingImports]
+        TITLE_KEYS,
+        build_more_view,
+    )
+    from views.optimization_view import (
+        build_optimization_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.overview_view import (
+        build_overview_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.settings_view import (
+        build_settings_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.sustainability_view import (
+        build_sustainability_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.training_view import (
+        build_training_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
 
 
 PREF_LANG = "ecopredict.lang"
@@ -161,6 +202,17 @@ async def main(page: ft.Page):
     nav = {"screen": "overview", "wide": None}
     cache: dict = {}
     hub_select: dict = {}
+    # A screen with its own inner page (a lab opened from the labs list)
+    # registers what Back should do there; see go_back().
+    inner_back: dict = {}
+
+    def set_inner_back(screen: str):
+        def setter(handler) -> None:
+            if handler is None:
+                inner_back.pop(screen, None)
+            else:
+                inner_back[screen] = handler
+        return setter
 
     def build_hub():
         control, select = build_forecast_hub(page)
@@ -176,7 +228,7 @@ async def main(page: ft.Page):
         "faults": lambda: build_faults_view(page),
         "opt": lambda: build_optimization_view(page),
         "sustainability": lambda: build_sustainability_view(page),
-        "labs": lambda: build_labs_view(page),
+        "labs": lambda: build_labs_view(page, set_inner_back("labs"), prefs),
         "training": lambda: build_training_view(page),
         "learn": lambda: build_learn_view(page),
         "settings": lambda: build_settings_view(page, refresh_chrome),
@@ -210,7 +262,7 @@ async def main(page: ft.Page):
             page.run_task(recheck)
 
         if screen in MORE_KEYS:
-            return build_app_header(page, on_recheck, on_back=lambda: show("more"), title=t(TITLE_KEYS[screen]))
+            return build_app_header(page, on_recheck, on_back=go_back, title=t(TITLE_KEYS[screen]))
         return build_app_header(page, on_recheck)
 
     def on_tab_change(e) -> None:
@@ -274,6 +326,7 @@ async def main(page: ft.Page):
         """Language or theme changed: rebuild every screen, then persist."""
         page.theme_mode = ft.ThemeMode.DARK if state.dark_mode else ft.ThemeMode.LIGHT
         cache.clear()
+        inner_back.clear()
         hub_select.clear()
         apply_layout()
         show(nav["screen"])
@@ -288,11 +341,22 @@ async def main(page: ft.Page):
     # stays True and Back exits normally.
     root_view = page.views[0]
 
-    async def on_confirm_pop(e) -> None:
+    def go_back() -> bool:
+        """Back inside the current screen first, then to its parent screen.
+        False when there is nowhere to go (Home), so the app may close."""
+        handler = inner_back.get(nav["screen"])
+        if handler is not None and handler():
+            return True
         target = back_target(nav["screen"])
-        await root_view.confirm_pop(target is None)
-        if target is not None:
-            show(target)
+        if target is None:
+            return False
+        show(target)
+        return True
+
+    async def on_confirm_pop(e) -> None:
+        # Decide before answering Flutter: confirm_pop(True) closes the app.
+        handled = go_back()
+        await root_view.confirm_pop(not handled)
 
     root_view.on_confirm_pop = on_confirm_pop
 

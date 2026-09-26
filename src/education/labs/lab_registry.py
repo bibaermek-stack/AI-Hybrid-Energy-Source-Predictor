@@ -192,44 +192,37 @@ LABS: dict[str, dict[str, Any]] = {
     },
     "lab_grid_impact": {
         "id": "lab_grid_impact",
-        "title": _L("Power flow intro (offline)", "Қуат ағыны (офлайн)"),
-        "minutes": 30,
+        "title": _L("PV on a low-voltage feeder", "Төмен кернеулі желідегі PV"),
+        "minutes": 25,
         "level": _L("Advanced", "Жоғары"),
         "phase": "P4",
         "tag": _L("Grid", "Желі"),
         "objectives": _L(
-            "Run offline pandapower notebook; inspect voltage vs PV export.",
-            "Офлайн pandapower notebook; кернеу vs PV экспортты бақылау.",
+            "Run a day of load flow on a 0.4 kV feeder; find when PV export pushes the voltage past 1.10 pu and fix it.",
+            "0.4 кВ желіде тәуліктік қуат ағынын есептеу; PV экспорты кернеуді 1.10 pu-дан қашан асыратынын тауып, түзету.",
         ),
-        "source": "notebooks/labs/power_flow.ipynb + CACER Tutorial 4 (submodule)",
+        "source": "src/simulation/grid/lv_feeder.py (backward/forward sweep; CACER Tutorial 4 concepts)",
         "render": "render_grid_impact",
         "quiz_id": "lab_grid_impact_quiz",
         "theory": "grid_impact",
-        # Streamlit is a hub only; heavy solve stays in Jupyter.
-        "available": True,
-        "offline": True,
     },
     "lab_inverter_wiring": {
         "id": "lab_inverter_wiring",
-        "title": _L(
-            "Inverter 3D wiring trainer",
-            "Инвертор 3D сым тренажері",
-        ),
+        "title": _L("Solar inverter system in 3D", "Күн инверторы жүйесі 3D-де"),
         "minutes": 25,
         "level": _L("Intermediate", "Орта"),
         "phase": "HW",
         "tag": _L("Hardware / 3D", "Жабдық / 3D"),
         "objectives": _L(
-            "On the Solar Inverter Subsystem model: fix reversed DC, open isolator, "
-            "swapped AC L/N, and reseat the data logger — graded check with try-again.",
-            "Solar Inverter Subsystem моделінде: кері DC, ашық ажыратқыш, ауысқан AC L/N "
-            "және logger-ді түзету — тексеру + қайтадан көру.",
+            "On the CAD model: name each part, find faults from the inverter display and meter "
+            "(DC isolator, polarity, earth, AC isolator, L/N, logger) and fix them in 3D.",
+            "CAD моделінде: әр бөлікті атау, ақауды инвертор экраны мен есептегіштен табу "
+            "(DC ажыратқыш, полярлық, жерге қосу, AC ажыратқыш, L/N, логгер) және 3D-де түзету.",
         ),
-        "source": "dashboard/static/models/solar_inverter_subsystem (CAD assembly)",
+        "source": "static/lab3d (CAD assembly «Solar Inverter Subsystem»)",
         "render": "render_inverter_wiring",
         "quiz_id": "lab_inverter_wiring_quiz",
         "theory": "inverter_wiring",
-        "available": True,
     },
 }
 

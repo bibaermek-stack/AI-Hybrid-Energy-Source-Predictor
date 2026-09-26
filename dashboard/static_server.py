@@ -54,10 +54,7 @@ def ensure_streamlit_static_assets() -> Path:
         raise FileNotFoundError(f"Project static not found: {src_root}")
 
     # HTML viewers
-    for html_name in (
-        "model_viewer.html",
-        "inverter_lab_viewer.html",
-    ):
+    for html_name in ("model_viewer.html",):
         src_html = src_root / html_name
         dash_html = dest_root / html_name
         if not src_html.is_file() and dash_html.is_file():
@@ -115,10 +112,10 @@ def ensure_streamlit_static_assets() -> Path:
                         except OSError:
                             pass
 
-    # Inverter meshes (primary + second Meshy unit) + training assemblies
+    # Inverter meshes (primary + second Meshy unit). The 3D lab's assembly is
+    # served by its own Streamlit component from static/lab3d/.
     _sync_model_dir("inverter")
     _sync_model_dir("inverter_2411046235")
-    _sync_model_dir("solar_inverter_subsystem")
 
     _assets_ready = True
     return dest_root

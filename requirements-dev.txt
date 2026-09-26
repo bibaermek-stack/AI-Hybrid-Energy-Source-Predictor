@@ -3,6 +3,7 @@ ruff>=0.6.0
 black>=24.0.0
 # unittest is stdlib; pytest optional
 pytest>=8.0.0
-# Mobile smoke tests import the camera extension's API; must match flet's pin
+# Mobile smoke tests import the camera and WebView extensions' APIs; must match flet's pin
 # (mobile/pyproject.toml, checked by tests/test_mobile_smoke.py).
 flet-camera==1.0.1
+flet-webview==1.0.1

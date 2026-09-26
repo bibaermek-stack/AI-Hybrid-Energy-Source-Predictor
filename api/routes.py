@@ -806,3 +806,9 @@ def get_solarman_generation_forecast(dc_capacity_kwp: float = 50.0):
 from api.insights import router as insights_router  # noqa: E402
 
 router.include_router(insights_router)
+
+# The 12 education labs for the mobile app (GET /labs, POST /labs/{id}/run,
+# GET /labs/{id}/test, POST /labs/{id}/test/grade, ...).
+from api.labs import router as labs_router  # noqa: E402
+
+router.include_router(labs_router)

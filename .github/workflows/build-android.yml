@@ -95,7 +95,7 @@ jobs:
           retention-days: 14
 
   emulator-test:
-    name: Emulator smoke test (launch, Back, camera)
+    name: Emulator smoke test (launch, Back, camera, labs)
     needs: build-android
     runs-on: ubuntu-latest
     timeout-minutes: 45

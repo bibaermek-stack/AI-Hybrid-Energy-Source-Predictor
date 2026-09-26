@@ -13,6 +13,7 @@ class BatteryESS:
         max_charge_kw: float,
         efficiency: float = 0.95,
         initial_soc_frac: float = 0.5,
+        min_soc_frac: float = 0.0,
     ) -> None:
         if capacity_kwh <= 0:
             raise ValueError("capacity_kwh must be > 0")
@@ -20,10 +21,14 @@ class BatteryESS:
             raise ValueError("max_charge_kw must be >= 0")
         if not 0.0 < efficiency <= 1.0:
             raise ValueError("efficiency must be in (0, 1]")
+        if not 0.0 <= min_soc_frac < 1.0:
+            raise ValueError("min_soc_frac must be in [0, 1)")
         self.capacity_wh = float(capacity_kwh) * 1000.0
         self.max_charge_w = float(max_charge_kw) * 1000.0
         self.efficiency = float(efficiency)
-        frac = min(1.0, max(0.0, float(initial_soc_frac)))
+        # Depth-of-discharge floor: the battery never discharges below it.
+        self.min_charge_wh = self.capacity_wh * float(min_soc_frac)
+        frac = min(1.0, max(float(min_soc_frac), float(initial_soc_frac)))
         self.current_charge_wh = self.capacity_wh * frac
 
     def charge(self, power_w: float, dt_hours: float) -> float:
@@ -50,11 +55,12 @@ class BatteryESS:
         if dt_hours <= 0 or required_power_w <= 0:
             return 0.0
         energy_needed = (required_power_w * dt_hours) / self.efficiency
-        if self.current_charge_wh >= energy_needed:
+        usable = max(0.0, self.current_charge_wh - self.min_charge_wh)
+        if usable >= energy_needed:
             self.current_charge_wh -= energy_needed
             return 0.0
-        provided = self.current_charge_wh
-        self.current_charge_wh = 0.0
+        provided = usable
+        self.current_charge_wh = self.min_charge_wh
         deficit_energy = energy_needed - provided
         return (deficit_energy * self.efficiency) / dt_hours
 

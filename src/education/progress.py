@@ -8,6 +8,12 @@ from __future__ import annotations
 from typing import Any, MutableMapping
 
 
+def _lab_ids() -> set[str]:
+    from src.education.labs.lab_registry import LAB_IDS
+
+    return set(LAB_IDS)
+
+
 class ProgressTracker:
     """
     Track completed lessons, quiz scores, exercise flags, and lab completions.
@@ -35,9 +41,12 @@ class ProgressTracker:
             data.setdefault("exercises", {})
             data.setdefault("labs_done", [])
             data.setdefault("lab_tasks", {})  # lab_id -> [task_id, ...]
-            # Back-fill labs_done from exercises already marked as lab_*
+            # Back-fill labs_done from exercises marked with a lab id. Only real
+            # lab ids: "lab_x_sim" (a simulation run) once counted as a lab.
+            lab_ids = _lab_ids()
+            data["labs_done"] = [lid for lid in data["labs_done"] if lid in lab_ids]
             for eid, ok in list(data["exercises"].items()):
-                if ok and str(eid).startswith("lab_") and eid not in data["labs_done"]:
+                if ok and eid in lab_ids and eid not in data["labs_done"]:
                     data["labs_done"].append(eid)
 
     @staticmethod
@@ -115,7 +124,8 @@ class ProgressTracker:
     def summary(self) -> dict[str, Any]:
         quizzes = self.data["quizzes"]
         avg = sum(quizzes.values()) / len(quizzes) if quizzes else 0.0
-        labs = list(self.data.get("labs_done") or [])
+        lab_ids = _lab_ids()
+        labs = [lid for lid in dict.fromkeys(self.data.get("labs_done") or []) if lid in lab_ids]
         lab_tasks = self._lab_tasks_map()
         n_tasks = 0
         lab_tasks_out: dict[str, list] = {}

@@ -15,6 +15,7 @@ if str(_DIR) not in sys.path:
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 # Setup logging
@@ -45,6 +46,10 @@ app = FastAPI(
     description="FastAPI Backend for EcoPredict AI Mobile App & Dashboards",
     version="2.0.0",
 )
+
+# The 3D lab's meshes (static/lab3d/models/*.obj, ~3 MB of text) compress
+# about 4:1; phones on mobile data load the lab much faster.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,

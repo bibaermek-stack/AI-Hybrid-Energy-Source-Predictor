@@ -6,7 +6,8 @@ Tiny adb/uiautomator helper for the emulator smoke test
                                                             content-desc matches <label>
     python3 scripts/android_ui.py tab <index>               tap bottom-nav slot 0..4 by
                                                             geometry (fallback)
-    python3 scripts/android_ui.py has <label>               exit 0 if <label> is on screen
+    python3 scripts/android_ui.py has <label> [--contains]  exit 0 if <label> is on screen
+    python3 scripts/android_ui.py swipe up|down             scroll the screen by a swipe
 
 Flutter exposes its semantics tree to UiAutomator, so NavigationBar
 destinations and buttons show up with their labels as content-desc.
@@ -53,10 +54,10 @@ def labels(node: ET.Element) -> list:
     return out
 
 
-def find(label: str, prefix: bool):
+def find(label: str, prefix: bool, contains: bool = False):
     for node in dump().iter("node"):
         for value in labels(node):
-            if value == label or (prefix and value.startswith(label)):
+            if value == label or (prefix and value.startswith(label)) or (contains and label in value):
                 match = BOUNDS.match(node.get("bounds") or "")
                 if match:
                     x1, y1, x2, y2 = map(int, match.groups())
@@ -73,14 +74,20 @@ def screen():
 def main() -> int:
     cmd, arg = sys.argv[1], sys.argv[2]
     prefix = "--prefix" in sys.argv
+    contains = "--contains" in sys.argv
     if cmd in ("tap", "has"):
-        pos = find(arg, prefix)
+        pos = find(arg, prefix, contains)
         if pos is None:
             print(f"not found: {arg}")
             return 1
         if cmd == "tap":
             adb("shell", "input", "tap", str(pos[0]), str(pos[1]))
             print(f"tapped {arg} at {pos}")
+        return 0
+    if cmd == "swipe":
+        w, h, _ = screen()
+        y1, y2 = (int(h * 0.75), int(h * 0.3)) if arg == "up" else (int(h * 0.3), int(h * 0.75))
+        adb("shell", "input", "swipe", str(w // 2), str(y1), str(w // 2), str(y2), "400")
         return 0
     if cmd == "tab":
         # Material NavigationBar is 80 dp tall above a 24–48 dp system bar;

@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.simulation.community.bess_step import bess_step
+from src.simulation.community.bess_step import BessStepResult, bess_step
 from src.simulation.community.load_profile import scale_profile, synthetic_load_profile
 from src.simulation.microgrid.solar_panel import SolarArray, SolarPanelConfig
 
@@ -38,6 +38,7 @@ def run_shared_energy_day(
     n_users: int = 3,
     panels_per_user: int = 40,
     peak_load_kw: float = 4.0,
+    pv_users: int | None = None,
     community_battery_kwh: float = 30.0,
     dod: float = 0.8,
     eta_half: float = 0.95,
@@ -58,11 +59,17 @@ def run_shared_energy_day(
        (before battery and grid), plus battery-mediated local use (simplified).
     """
     n_users = max(1, int(n_users))
+    # Households 0..pv_users-1 own PV; the rest only consume. With every
+    # household a prosumer they all have surplus at the same hours and nothing
+    # is shared, so the lab lets students mix prosumers and consumers.
+    pv_users = n_users if pv_users is None else min(max(0, int(pv_users)), n_users)
     n = len(weather_df)
     users_pv = []
     users_load = []
     for u in range(n_users):
         pv = _pv_series_from_weather(weather_df, panels_per_user + u * 5)
+        if u >= pv_users:
+            pv = np.zeros_like(pv)
         load_df = scale_profile(
             synthetic_load_profile(n, seed=seed + u),
             peak_kw=peak_load_kw * (0.85 + 0.1 * (u % 3)),
@@ -112,13 +119,17 @@ def run_shared_energy_day(
 
         # Battery sees +surplus charge intent or -deficit discharge intent (kWh, dt=1h)
         e_intent = surplus_pool - deficit_pool
-        step = bess_step(
-            e_intent,
-            soc,
-            eta_halfcycle=eta_half,
-            battery_min_kwh=bmin,
-            battery_max_kwh=bmax,
-        )
+        if bmax > 1e-9:
+            step = bess_step(
+                e_intent,
+                soc,
+                eta_halfcycle=eta_half,
+                battery_min_kwh=bmin,
+                battery_max_kwh=bmax,
+            )
+        else:
+            # No community battery: the whole residual goes to / comes from the grid.
+            step = BessStepResult(0.0, 0.0, 0.0, 0.0, 0.0)
         soc = step.soc_kwh
         # Map battery action to residual grid
         # If we intended charge and battery took less → export residual

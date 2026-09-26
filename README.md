@@ -18,14 +18,14 @@ Stack: **FastAPI** · **Streamlit** · **RandomForest / XGBoost / LSTM** · **YO
 | Fault diagnostics | YOLOv11 + clean/dirty CNN (weights optional offline) |
 | AI advisor | EN/KK RAG (ChromaDB) |
 | Sustainability | CO₂, LCOE, ROI, payback, NPV helpers |
-| **Education labs (12)** | Theory EN/KK · KaTeX · graded tasks · ProgressTracker |
+| **Education labs (12)** | Theory EN/KK · KaTeX · run on one shared engine · practice tasks · graded test per lab · 3D inverter model · website + Android/iOS |
 
 **Languages:** English + Қазақша (UI).
 
 ### What is *not* on the home page
 
 - **No home-page Sketchfab / solar-panel 3D hero** (removed on purpose).  
-- Interactive **3D is only** under **Labs → Inverter 3D wiring trainer** (optional embed; default is wiring board + full-screen 3D).
+- Interactive **3D is only** under **Labs → 12. Solar inverter system in 3D** (the CAD assembly in `static/lab3d/`, embedded on the site and in the app).
 
 ---
 
@@ -36,8 +36,19 @@ Stack: **FastAPI** · **Streamlit** · **RandomForest / XGBoost / LSTM** · **YO
 | **P1** RES microgrid | `lab_pv_physics`, `lab_mppt_po`, `lab_bess_soc`, `lab_microgrid_dispatch` |
 | **P2** | `lab_heuristic_vs_pulp` (rule-based vs PuLP) |
 | **P3** CACER-inspired | `lab_pv_yield`, `lab_load_shape`, `lab_bess_community`, `lab_shared_energy`, `lab_rec_finance` |
-| **P4** elective | `lab_grid_impact` (offline notebook / pandapower optional) |
-| **HW** | `lab_inverter_wiring` (wiring board + optional 3D full screen) |
+| **P4** | `lab_grid_impact` — day of load flow on a 0.4 kV feeder (`src/simulation/grid/lv_feeder.py`, no pandapower) |
+| **HW / 3D** | `lab_inverter_wiring` — CAD model: explore the parts, fix fault scenarios in 3D, 3D test |
+
+How the pieces fit:
+
+- `src/education/labs/runner.py` — parameters and run of every lab, returning JSON (metrics, charts, notes).
+  The website (`dashboard/views/labs.py`) and the phone (`POST /labs/{id}/run`) both call it.
+- `src/education/labs/lab_tests.py` — the final test of each lab (5 questions, 7 for the 3D lab; pass mark 70 %).
+  "Run" questions are graded with the engine itself; 3D questions are answered by tapping the model or fixing a board.
+- `static/lab3d/` — the 3D viewer (three.js bundled locally, no CDN), meshes and `assembly.json` (which mesh is
+  which part, kk/en). Rebuild meshes and `lab_state.json` with `python scripts/build_lab3d_assets.py`;
+  `tests/test_lab3d_assets.py` fails when they are stale. On the site it is a Streamlit component
+  (`dashboard/components/lab3d.py`); in the app it opens in a WebView (`flet-webview`).
 
 Sources: RenewableEnergySim (MIT) · CACER_Simulator concepts (BSD-3) · thin adapters under `src/simulation/`.  
 Plan: [`docs/INTEGRATION_EDU_LABS.md`](docs/INTEGRATION_EDU_LABS.md) · notices: [`third_party/NOTICE.md`](third_party/NOTICE.md)
@@ -211,7 +222,12 @@ python -m unittest discover -s tests -v
 | GET | `/solarman/status` | 🔒 Credential status — needs `X-API-Key` |
 | GET | `/metrics` | Paper metrics (`artifacts/model_metrics.json`) + live model feature importances |
 | POST | `/sustainability/impact` | CO₂ avoided, tree/car equivalents, self-sufficiency (`src/sustainability`) |
-| POST | `/labs/microgrid-day` | 24 h PV + battery + grid lab simulation (`src/simulation`) |
+| POST | `/labs/microgrid-day` | 24 h PV + battery + grid lab simulation (`src/simulation`) — kept for app 1.1 |
+| GET | `/labs`, `/labs/{id}` | The 12 labs; one lab's parameters, theory (kk/en) and 3D viewer path |
+| POST | `/labs/{id}/run` | Run a lab (`src/education/labs/runner.py`) |
+| GET / POST | `/labs/{id}/test`, `/labs/{id}/test/grade` | The lab's test without answers; grading |
+| POST | `/labs/{id}/tasks/{task}/check` | Check a practice task |
+| GET | `/static/lab3d/index.html` | 3D inverter lab (used by the app's WebView) |
 
 🔒 = requires the `X-API-Key` header matching `ECOPREDICT_API_KEY`. These two routes
 read/write the Solarman credentials the whole process authenticates with, and the API

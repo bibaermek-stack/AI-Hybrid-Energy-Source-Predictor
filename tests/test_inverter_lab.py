@@ -1,4 +1,4 @@
-"""Tests for inverter wiring trainer."""
+"""Tests for the 3D inverter trainer's board (src/education/inverter_lab.py)."""
 
 from __future__ import annotations
 
@@ -10,16 +10,18 @@ from src.education.inverter_lab import (
     grade_wiring,
     initial_state,
     list_scenarios,
+    normalize_state,
+    status_table,
 )
 from src.education.lab_tasks import check_task_answer, list_lab_task_ids
 
 
 class TestInverterLab(unittest.TestCase):
     def test_scenarios_exist(self):
-        sc = list_scenarios("en")
-        ids = {s["id"] for s in sc}
+        ids = {s["id"] for s in list_scenarios("en")}
         self.assertIn("reversed_dc", ids)
         self.assertIn("compound", ids)
+        self.assertEqual(len({s["title"] for s in list_scenarios("kk")}), len(ids))
 
     def test_healthy_grades_ok(self):
         r = grade_wiring(dict(CORRECT))
@@ -28,20 +30,20 @@ class TestInverterLab(unittest.TestCase):
 
     def test_reversed_dc_fault(self):
         st = initial_state("reversed_dc")
-        tags = diagnose_faults(st)
-        self.assertIn("reversed_dc", tags)
-        r = grade_wiring(st)
-        self.assertFalse(r["ok"])
-        # Fix
-        st["dc_pos"] = "pv_pos"
-        st["dc_neg"] = "pv_neg"
+        self.assertEqual(diagnose_faults(st), ["dc_polarity"])
+        self.assertFalse(grade_wiring(st)["ok"])
+        st["dc_polarity"] = "ok"
         self.assertTrue(grade_wiring(st)["ok"])
 
     def test_compound_needs_multiple_fixes(self):
         st = initial_state("compound")
-        self.assertGreaterEqual(len(diagnose_faults(st)), 2)
+        self.assertGreaterEqual(len(diagnose_faults(st)), 3)
         st.update(CORRECT)
         self.assertTrue(grade_wiring(st)["ok"])
+
+    def test_unknown_values_are_not_trusted(self):
+        self.assertEqual(normalize_state({"dc_isolator": "sideways"})["dc_isolator"], "on")
+        self.assertEqual(len(status_table()), 64)
 
     def test_lab_tasks_bank(self):
         ids = list_lab_task_ids("lab_inverter_wiring")
