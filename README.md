@@ -296,6 +296,9 @@ it must report `"api": "full"`. `"api": "stub"` means Root Directory still point
 - **Bilingual (KK / EN)**: every string lives in `mobile/i18n.py` as a (kk, en) pair;
   `tests/test_mobile_i18n.py` fails on a missing translation or a hardcoded string.
 - **Remembers** language and theme between launches (SharedPreferences).
+- **Camera** (Android/iOS): photograph a panel for YOLO diagnosis via the `flet-camera`
+  extension; the desktop/web preview offers the gallery only.
+- **Android Back** goes More-screen → More → Home → exit instead of closing the app from anywhere.
 
 ### Building Mobile Binaries:
 ```bash

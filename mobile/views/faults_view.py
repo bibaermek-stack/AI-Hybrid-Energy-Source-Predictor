@@ -36,6 +36,15 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 # 640 px, so this costs the model nothing.
 PICK_COMPRESSION_QUALITY = 80
 
+# The camera comes from the flet-camera extension, which is compiled into the
+# Android/iOS build only; the desktop and web preview clients do not carry it
+# and would draw "Unknown control: Camera".
+MOBILE_PLATFORMS = {ft.PagePlatform.ANDROID, ft.PagePlatform.IOS}
+
+
+def camera_supported(page) -> bool:
+    return getattr(page, "platform", None) in MOBILE_PLATFORMS and not getattr(page, "web", False)
+
 
 def build_faults_view(page: ft.Page) -> ft.Control:
     """Solar fault detection screen backed by the real YOLO endpoint."""
@@ -117,6 +126,107 @@ def build_faults_view(page: ft.Page) -> ft.Control:
     # FilePicker" banner over every screen.
     page.services.append(file_picker)
 
+    async def analyze_image(content: bytes, filename: str) -> None:
+        """Size check, preview, then YOLO — shared by the gallery and the camera."""
+        if len(content) > MAX_UPLOAD_BYTES:
+            # Say so here rather than uploading megabytes to get a 413 back.
+            show(
+                t("fl_too_large"),
+                "—",
+                t("fl_too_large_advice", mb=len(content) / 1024 / 1024, limit=MAX_UPLOAD_BYTES // 1024 // 1024),
+                c["error"],
+            )
+            return
+        # Image.src takes str | bytes, so the picked image renders from memory.
+        img_preview.src = content
+        img_preview.visible = True
+        preview_box.content = img_preview
+        await run_detection(content, filename)
+
+    # ---- camera (Android / iOS) -------------------------------------------
+    camera_holder = ft.Container(height=360, border_radius=14, bgcolor="#000000", clip_behavior=ft.ClipBehavior.HARD_EDGE)
+    camera_status = ft.Text("", size=12, color=c["text_secondary"])
+    camera_ref: dict = {}
+
+    def close_camera() -> None:
+        # Dropping the control from the tree disposes the native controller.
+        camera_ref.clear()
+        camera_holder.content = None
+        camera_panel.visible = False
+        page.update()
+
+    async def on_camera_click(e) -> None:
+        import flet_camera as fc  # only present in the mobile build
+
+        cam = fc.Camera(expand=True, preview_enabled=True)
+        camera_holder.content = cam
+        camera_panel.visible = True
+        camera_status.value = t("fl_cam_starting")
+        btn_capture.disabled = True
+        page.update()
+        try:
+            cameras = await cam.get_available_cameras()
+            if not cameras:
+                raise RuntimeError(t("fl_cam_none"))
+            back = next((d for d in cameras if d.lens_direction == fc.CameraLensDirection.BACK), cameras[0])
+            # 720p is plenty for a 640 px model; no audio, so no microphone prompt.
+            await cam.initialize(back, fc.ResolutionPreset.HIGH, enable_audio=False)
+        except Exception as err:
+            close_camera()
+            show(t("fl_cam_failed"), "—", t("fl_cam_failed_advice", reason=str(err) or type(err).__name__), c["error"])
+            return
+        camera_ref["cam"] = cam
+        camera_status.value = t("fl_cam_ready")
+        btn_capture.disabled = False
+        page.update()
+
+    async def on_capture_click(e) -> None:
+        cam = camera_ref.get("cam")
+        if cam is None:
+            return
+        btn_capture.disabled = True
+        camera_status.value = t("fl_cam_capturing")
+        page.update()
+        try:
+            content = await cam.take_picture()
+        except Exception as err:
+            close_camera()
+            show(t("fl_cam_failed"), "—", t("fl_cam_failed_advice", reason=str(err) or type(err).__name__), c["error"])
+            return
+        close_camera()
+        if not content:
+            show(t("fl_read_failed"), "—", t("fl_read_empty"), c["error"])
+            return
+        await analyze_image(bytes(content), "camera.jpg")
+
+    btn_capture = ft.Button(
+        content=ft.Text(t("fl_cam_capture")),
+        icon=ft.Icons.CAMERA,
+        style=ft.ButtonStyle(bgcolor=c["primary"], color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=12)),
+        on_click=on_capture_click,
+        disabled=True,
+        expand=True,
+    )
+    camera_panel = ft.Column(
+        [
+            camera_holder,
+            camera_status,
+            ft.Row(
+                [
+                    btn_capture,
+                    ft.OutlinedButton(
+                        content=ft.Text(t("fl_cam_cancel")),
+                        on_click=lambda e: close_camera(),
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=12)),
+                    ),
+                ],
+                spacing=10,
+            ),
+        ],
+        spacing=8,
+        visible=False,
+    )
+
     async def on_upload_click(e) -> None:
         # pick_files is awaitable and returns the files directly; with_data gives
         # the bytes without touching the filesystem, which matters on Android
@@ -144,21 +254,7 @@ def build_faults_view(page: ft.Page) -> ft.Control:
         if not content:
             show(t("fl_read_failed"), "—", t("fl_read_empty"), c["error"])
             return
-        if len(content) > MAX_UPLOAD_BYTES:
-            # Say so here rather than uploading megabytes to get a 413 back.
-            show(
-                t("fl_too_large"),
-                "—",
-                t("fl_too_large_advice", mb=len(content) / 1024 / 1024, limit=MAX_UPLOAD_BYTES // 1024 // 1024),
-                c["error"],
-            )
-            return
-
-        # Image.src takes str | bytes, so the picked image renders from memory.
-        img_preview.src = content
-        img_preview.visible = True
-        preview_box.content = img_preview
-        await run_detection(content, picked.name or "panel.jpg")
+        await analyze_image(content, picked.name or "panel.jpg")
 
     btn_upload = ft.Button(
         content=ft.Text(t("fl_btn_upload")),
@@ -169,7 +265,19 @@ def build_faults_view(page: ft.Page) -> ft.Control:
             shape=ft.RoundedRectangleBorder(radius=12),
         ),
         on_click=on_upload_click,
+        expand=True,
     )
+    buttons = [btn_upload]
+    if camera_supported(page):
+        buttons.append(
+            ft.Button(
+                content=ft.Text(t("fl_btn_camera")),
+                icon=ft.Icons.PHOTO_CAMERA,
+                style=ft.ButtonStyle(bgcolor=c["secondary"], color="#FFFFFF", shape=ft.RoundedRectangleBorder(radius=12)),
+                on_click=on_camera_click,
+                expand=True,
+            )
+        )
 
     card_diagnosis = ft.Container(
         content=ft.Column([txt_class, txt_conf, ft.Divider(height=1, color=c["card_border"]), txt_rec, txt_all], spacing=6),
@@ -183,7 +291,8 @@ def build_faults_view(page: ft.Page) -> ft.Control:
         controls=[
             ft.Text("🔍 " + t("fl_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Text(t("fl_desc"), size=12, color=c["text_secondary"]),
-            btn_upload,
+            ft.Row(buttons, spacing=10),
+            camera_panel,
             progress_bar,
             ft.Container(content=preview_box, alignment=ft.Alignment.CENTER, padding=10, bgcolor=c["surface"], border_radius=14, border=ft.Border.all(1, c["card_border"])),
             card_diagnosis,

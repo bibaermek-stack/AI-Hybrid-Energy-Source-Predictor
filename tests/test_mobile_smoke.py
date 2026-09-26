@@ -27,20 +27,26 @@ except ImportError:  # pragma: no cover - flet is in requirements.txt
     ft = None
 
 
-def pinned_flet_version() -> str:
+def mobile_pins() -> dict:
+    """{package: version} for every `name==version` in mobile/pyproject.toml."""
     text = (ROOT / "mobile" / "pyproject.toml").read_text(encoding="utf-8")
-    match = re.search(r'"flet==([^"]+)"', text)
-    return match.group(1) if match else ""
+    return dict(re.findall(r'"([A-Za-z0-9_.-]+)==([^"]+)"', text))
+
+
+def pinned_flet_version() -> str:
+    return mobile_pins().get("flet", "")
 
 
 class FakePage:
     """The slice of ft.Page the view builders touch while constructing."""
 
-    def __init__(self):
+    def __init__(self, platform=None, web=False):
         self.services = []
         self.overlay = []
         self.navigation_bar = None
         self.appbar = None
+        self.platform = platform
+        self.web = web
 
     def update(self, *args, **kwargs):
         pass
@@ -62,6 +68,45 @@ class TestMobileScreensBuild(unittest.TestCase):
             "requirements.txt installs a different flet than the mobile build "
             "bundles, so this smoke test would check the wrong version",
         )
+
+    def test_flet_extensions_match_flet(self):
+        # Extension packages are released in lockstep with flet; a mismatch
+        # builds against a Flutter package the runtime does not expect.
+        pins = mobile_pins()
+        extensions = {name: v for name, v in pins.items() if name.startswith("flet-")}
+        self.assertIn("flet-camera", extensions)
+        for name, v in extensions.items():
+            self.assertEqual(v, pins["flet"], f"{name} must be pinned to flet's version")
+
+    def test_camera_extension_api(self):
+        """The calls faults_view makes on flet_camera exist with these names."""
+        try:
+            import flet_camera as fc
+        except ImportError:
+            self.skipTest("flet-camera not installed (requirements-dev.txt)")
+        import inspect
+        from importlib.metadata import version
+
+        self.assertEqual(version("flet-camera"), mobile_pins()["flet-camera"])
+        for method in ("get_available_cameras", "initialize", "take_picture"):
+            self.assertTrue(inspect.iscoroutinefunction(getattr(fc.Camera, method)), method)
+        self.assertIn("enable_audio", inspect.signature(fc.Camera.initialize).parameters)
+        self.assertTrue(hasattr(fc.CameraLensDirection, "BACK"))
+        self.assertTrue(hasattr(fc.ResolutionPreset, "HIGH"))
+
+    def test_camera_button_only_on_phones(self):
+        """Desktop/web preview clients lack the camera extension."""
+        from mobile.views import faults_view
+
+        def buttons(page):
+            view = faults_view.build_faults_view(page)
+            row = next(c for c in view.controls if isinstance(c, ft.Row))
+            return len(row.controls)
+
+        self.assertEqual(buttons(FakePage(platform=ft.PagePlatform.ANDROID)), 2)
+        self.assertEqual(buttons(FakePage(platform=ft.PagePlatform.IOS)), 2)
+        self.assertEqual(buttons(FakePage(platform=ft.PagePlatform.ANDROID, web=True)), 1)
+        self.assertEqual(buttons(FakePage(platform=ft.PagePlatform.LINUX)), 1)
 
     def test_every_screen_builds_without_deprecations(self):
         """Every screen, in both languages and both themes."""

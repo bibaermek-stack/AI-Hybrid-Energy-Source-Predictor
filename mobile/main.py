@@ -24,7 +24,7 @@ try:
     from mobile.state import state
     from mobile.api_client import api_client
     from mobile.components.header import build_app_header
-    from mobile.components.nav_bar import RAIL_BREAKPOINT, TABS, build_bottom_nav, build_nav_rail
+    from mobile.components.nav_bar import MORE_KEYS, RAIL_BREAKPOINT, TAB_KEYS, back_target, build_bottom_nav, build_nav_rail, tab_index
 
     from mobile.views.overview_view import build_overview_view
     from mobile.views.forecast_hub_view import build_forecast_hub
@@ -37,12 +37,12 @@ try:
     from mobile.views.chat_view import build_chat_view
     from mobile.views.live_view import build_live_view
     from mobile.views.settings_view import build_settings_view
-    from mobile.views.more_view import MORE_ITEMS, TITLE_KEYS, build_more_view
+    from mobile.views.more_view import TITLE_KEYS, build_more_view
 except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
     from components.header import build_app_header  # type: ignore # pyright: ignore[reportMissingImports]
-    from components.nav_bar import RAIL_BREAKPOINT, TABS, build_bottom_nav, build_nav_rail  # type: ignore # pyright: ignore[reportMissingImports]
+    from components.nav_bar import MORE_KEYS, RAIL_BREAKPOINT, TAB_KEYS, back_target, build_bottom_nav, build_nav_rail, tab_index  # type: ignore # pyright: ignore[reportMissingImports]
 
     from views.overview_view import build_overview_view  # type: ignore # pyright: ignore[reportMissingImports]
     from views.forecast_hub_view import build_forecast_hub  # type: ignore # pyright: ignore[reportMissingImports]
@@ -55,21 +55,12 @@ except (ImportError, ModuleNotFoundError):
     from views.chat_view import build_chat_view  # type: ignore # pyright: ignore[reportMissingImports]
     from views.live_view import build_live_view  # type: ignore # pyright: ignore[reportMissingImports]
     from views.settings_view import build_settings_view  # type: ignore # pyright: ignore[reportMissingImports]
-    from views.more_view import MORE_ITEMS, TITLE_KEYS, build_more_view  # type: ignore # pyright: ignore[reportMissingImports]
+    from views.more_view import TITLE_KEYS, build_more_view  # type: ignore # pyright: ignore[reportMissingImports]
 
 
-TAB_KEYS = [key for key, *_ in TABS]
-MORE_KEYS = {key for key, *_ in MORE_ITEMS}
 PREF_LANG = "ecopredict.lang"
 PREF_THEME = "ecopredict.theme"
 DESKTOP_PLATFORMS = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
-
-
-def tab_index(screen: str) -> int:
-    """Bottom-bar slot a screen belongs to; secondary screens sit under More."""
-    if screen in TAB_KEYS:
-        return TAB_KEYS.index(screen)
-    return TAB_KEYS.index("more")
 
 
 async def main(page: ft.Page):
@@ -269,6 +260,7 @@ async def main(page: ft.Page):
             if isinstance(control, ft.Row) and control.controls and isinstance(control.controls[0], ft.NavigationRail):
                 control.controls[0].selected_index = index
         page.appbar = build_header()
+        root_view.can_pop = back_target(key) is None
         page.update()
         if reload:
             run_reload(view)
@@ -288,6 +280,21 @@ async def main(page: ft.Page):
         page.run_task(save_prefs)
 
     state.subscribe(on_state_changed)
+
+    # ---- system Back button (Android) ------------------------------------
+    # Everything lives in one Flet view, so Back used to pop that view and
+    # close the app from any screen. can_pop=False makes Flutter ask first
+    # (on_confirm_pop); we refuse the pop and navigate instead. On Home it
+    # stays True and Back exits normally.
+    root_view = page.views[0]
+
+    async def on_confirm_pop(e) -> None:
+        target = back_target(nav["screen"])
+        await root_view.confirm_pop(target is None)
+        if target is not None:
+            show(target)
+
+    root_view.on_confirm_pop = on_confirm_pop
 
     def on_resize(e) -> None:
         wide = (page.width or 0) >= RAIL_BREAKPOINT
