@@ -490,6 +490,13 @@ class APIClient:
         )
         return res if isinstance(res, dict) else None
 
+    async def lab_report(self, lab_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """The student's report, built on the server (POST /labs/{id}/report)."""
+        res = await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/labs/{lab_id}/report", payload, 60.0
+        )
+        return res if isinstance(res, dict) else None
+
     @staticmethod
     def lab_viewer_url(viewer_path: str) -> str:
         """The 3D lab page on the API server; it calls back to the same server."""

@@ -24,6 +24,13 @@ class FakePage:
         self.navigation_bar = self.appbar = None
         self.platform, self.web = platform, web
         self.tasks = []
+        self.dialogs = []
+
+    def show_dialog(self, dialog):
+        self.dialogs.append(dialog)
+
+    def pop_dialog(self):
+        return self.dialogs.pop() if self.dialogs else None
 
     def update(self, *args, **kwargs):
         pass
@@ -91,6 +98,9 @@ class _Api:
             f"/labs/{lab_id}/tasks/{task_id}/check",
             json={"number": number, "choice_index": choice_index},
         ).json()
+
+    async def lab_report(self, lab_id, payload):
+        return self.c.post(f"/labs/{lab_id}/report", json=payload).json()
 
     @staticmethod
     def lab_viewer_url(path):
@@ -241,6 +251,75 @@ class TestMobileLabs(unittest.TestCase):
 
                 self.assertTrue(back["h"]())
                 self.assertIn("Тапсырма 1/3", texts(view))
+
+            asyncio.run(scenario())
+
+    def test_report_is_built_on_the_server_and_shared(self):
+        from mobile.views import labs_view
+
+        page, prefs, back = FakePage(), FakePrefs(), {}
+        shared = mock.AsyncMock()
+        with (
+            mock.patch.object(labs_view, "api_client", self.api),
+            mock.patch.object(ft.Share, "share_files", shared),
+        ):
+            view = labs_view.build_labs_view(page, lambda h: back.__setitem__("h", h), prefs)
+
+            async def scenario():
+                await view.data()
+                card = next(
+                    c
+                    for c in walk(view)
+                    if isinstance(c, ft.Container) and c.data == "lab_pv_physics"
+                )
+                card.on_click(None)
+                await self._drain(page)
+                run_btn = next(
+                    c for c in walk(view) if isinstance(c, ft.Button) and "Іске қосу" in texts(c)
+                )
+                await run_btn.on_click(None)
+                await self._drain(page)
+                seg = next(c for c in walk(view) if isinstance(c, ft.SegmentedButton))
+                seg.selected = ["test"]
+                seg.on_change(mock.Mock(control=seg))
+                from src.education.labs.lab_tests import correct_answers
+
+                right = correct_answers("lab_pv_physics")
+                for qid, c in self._fields(view).items():
+                    c.value = str(right[qid]) if isinstance(c, ft.RadioGroup) else f"{right[qid]}"
+                submit = next(
+                    c
+                    for c in walk(view)
+                    if isinstance(c, ft.Button) and "Тестті тапсыру" in texts(c)
+                )
+                await submit.on_click(None)
+                self.assertEqual(
+                    json.loads(prefs.store["ecopredict.labs_best"]), {"lab_pv_physics": 100.0}
+                )
+
+                report_btn = next(
+                    c for c in walk(view) if isinstance(c, ft.IconButton) and c.data == "report"
+                )
+                report_btn.on_click(None)
+                dialog = page.dialogs[-1]
+                fields = {c.label: c for c in walk(dialog) if isinstance(c, ft.TextField)}
+                fields["Аты-жөні"].value = "Айгерім Сәдуақасова"
+                fields["Тобы"].value = "ЭЭ-21"
+                self.assertTrue(any("Соңғы іске қосу: бар" in t for t in texts(dialog)))
+                share = next(
+                    c for c in walk(dialog) if isinstance(c, ft.Button) and c.data == "share"
+                )
+                await share.on_click(None)
+
+                files = shared.await_args.args[0]
+                self.assertEqual(files[0].name, "lab01_report_Aigerim_Saduaqasova.html")
+                page_html = files[0].data.decode("utf-8")
+                for needle in ("Айгерім Сәдуақасова", "ЭЭ-21", "Панель саны", "<svg", "100 %"):
+                    self.assertIn(needle, page_html)
+                self.assertEqual(
+                    json.loads(prefs.store["ecopredict.student"]),
+                    {"name": "Айгерім Сәдуақасова", "group": "ЭЭ-21"},
+                )
 
             asyncio.run(scenario())
 

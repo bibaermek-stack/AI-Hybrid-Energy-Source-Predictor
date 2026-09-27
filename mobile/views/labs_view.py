@@ -34,6 +34,8 @@ except (ImportError, ModuleNotFoundError):
 
 PREF_PASSED = "ecopredict.labs_passed"
 PREF_TASKS = "ecopredict.labs_tasks_done"  # {lab_id: [task ids solved]}
+PREF_BEST = "ecopredict.labs_best"  # {lab_id: best test percent}
+PREF_STUDENT = "ecopredict.student"  # {"name": ..., "group": ...}
 WEBVIEW_PLATFORMS = {ft.PagePlatform.ANDROID, ft.PagePlatform.IOS, ft.PagePlatform.MACOS}
 
 
@@ -75,6 +77,12 @@ def build_labs_view(
         "labs": None,
         "passed": set(),
         "tasks_done": {},
+        "best": {},  # lab_id -> best test percent
+        "student": {"name": "", "group": ""},
+        # this session only, for the report: what the server should rebuild
+        "last_params": {},
+        "last_answers": {},
+        "check3d": {},
         "loading": False,
         "open": None,
     }
@@ -93,8 +101,34 @@ def build_labs_view(
             raw = await asyncio.wait_for(prefs.get(PREF_TASKS), timeout=3)
             done = json.loads(raw) if raw else {}
             data["tasks_done"] = {k: set(v) for k, v in done.items() if isinstance(v, list)}
+            raw = await asyncio.wait_for(prefs.get(PREF_BEST), timeout=3)
+            best = json.loads(raw) if raw else {}
+            data["best"] = {k: float(v) for k, v in best.items() if isinstance(v, (int, float))}
+            raw = await asyncio.wait_for(prefs.get(PREF_STUDENT), timeout=3)
+            student = json.loads(raw) if raw else {}
+            if isinstance(student, dict):
+                data["student"] = {
+                    "name": str(student.get("name") or ""),
+                    "group": str(student.get("group") or ""),
+                }
         except Exception as err:
             print(f"Lab progress not loaded: {err}")
+
+    async def save_pref(key: str, value: Any) -> None:
+        if prefs is None:
+            return
+        try:
+            await prefs.set(key, json.dumps(value, ensure_ascii=False))
+        except Exception as err:
+            print(f"{key} not saved: {err}")
+
+    async def record_test(lab_id: str, percent: Any, passed: bool) -> None:
+        pct = float(percent or 0)
+        if pct > data["best"].get(lab_id, -1):
+            data["best"][lab_id] = pct
+            await save_pref(PREF_BEST, data["best"])
+        if passed:
+            await mark_passed(lab_id)
 
     async def mark_passed(lab_id: str) -> None:
         data["passed"].add(lab_id)
@@ -113,6 +147,15 @@ def build_labs_view(
                 )
             except Exception as err:
                 print(f"Task progress not saved: {err}")
+
+    def service(cls):
+        """The page's instance of a Flet service (UrlLauncher, Share), added on first use."""
+        found = next((s for s in page.services if isinstance(s, cls)), None)
+        if found is None:
+            found = cls()
+            page.services.append(found)
+            page.update()
+        return found
 
     # ---- list of labs --------------------------------------------------------
     list_column = ft.ListView(spacing=10, padding=12, expand=True)
@@ -286,6 +329,13 @@ def build_labs_view(
                                 color=c["text_primary"],
                                 expand=True,
                             ),
+                            ft.IconButton(
+                                ft.Icons.DESCRIPTION_OUTLINED,
+                                on_click=lambda e: open_report(detail),
+                                icon_color=c["primary"],
+                                tooltip=t("report_btn"),
+                                data="report",
+                            ),
                         ],
                         spacing=4,
                     ),
@@ -457,13 +507,15 @@ def build_labs_view(
             ring.visible = True
             msg.value = ""
             page.update()
-            res = await api_client.lab_run(lab_id, dict(values))
+            params = dict(values)
+            res = await api_client.lab_run(lab_id, params)
             ring.visible = False
             if res is None:
                 msg.value, msg.color = t("lab_err_run", reason=_reason()), c["error"]
                 results.controls = []
             else:
                 msg.value = ""
+                data["last_params"][lab_id] = params  # for the report
                 render_result(res)
             page.update()
             if res is not None:
@@ -656,6 +708,8 @@ def build_labs_view(
                 summary.value, summary.color = t("test_grade_err", reason=_reason()), c["error"]
                 page.update()
                 return
+            data["last_answers"][lab_id] = answers  # for the report
+            await record_test(lab_id, res.get("percent"), bool(res.get("passed")))
             for d in res.get("details") or []:
                 fb = state_["feedback"].get(d["id"])
                 if fb:
@@ -670,7 +724,6 @@ def build_labs_view(
             )
             if res.get("passed"):
                 summary.value, summary.color = f"{text} · {t('test_passed')}", c["success"]
-                await mark_passed(lab_id)
             else:
                 summary.value, summary.color = (
                     f"{text} · {t('test_failed', p=int(res.get('pass_percent', 70)))}",
@@ -842,18 +895,110 @@ def build_labs_view(
         ]
         return panel
 
+    # ---- the student's report (built on the server) ---------------------------
+    def open_report(detail: Dict[str, Any]) -> None:
+        lab_id = detail["id"]
+        name = ft.TextField(label=t("report_name"), value=data["student"]["name"], dense=True)
+        group = ft.TextField(label=t("report_group"), value=data["student"]["group"], dense=True)
+        status_text = ft.Text("", size=12, selectable=True)
+        best = data["best"].get(lab_id)
+        tasks_total = len(detail.get("tasks") or [])
+        tasks_done = len(
+            [x for x in data["tasks_done"].get(lab_id, ()) if not x.startswith("scenario_")]
+        )
+        summary = []
+        if not detail.get("viewer_path"):
+            has_run = lab_id in data["last_params"]
+            summary.append(t("report_has_run", v=t("report_yes") if has_run else t("report_no")))
+        summary.append(
+            t("report_has_test", v=f"{best:.0f} %" if best is not None else t("report_no"))
+        )
+        summary.append(t("report_has_tasks", done=min(tasks_done, tasks_total), total=tasks_total))
+
+        async def make() -> Optional[Dict[str, Any]]:
+            data["student"] = {
+                "name": (name.value or "").strip(),
+                "group": (group.value or "").strip(),
+            }
+            await save_pref(PREF_STUDENT, data["student"])
+            status_text.value, status_text.color = t("report_making"), c["text_secondary"]
+            page.update()
+            res = await api_client.lab_report(
+                lab_id,
+                {
+                    "student": data["student"]["name"],
+                    "group": data["student"]["group"],
+                    "lang": state.lang,
+                    "params": data["last_params"].get(lab_id),
+                    "answers": data["last_answers"].get(lab_id),
+                    "tasks_done": sorted(data["tasks_done"].get(lab_id, ())),
+                    "best_test_percent": best,
+                    "last_3d_check": data["check3d"].get(lab_id),
+                },
+            )
+            if res is None:
+                status_text.value, status_text.color = t("report_err", reason=_reason()), c["error"]
+            else:
+                status_text.value = t("report_shared", name=res.get("filename", ""))
+                status_text.color = c["success"]
+            page.update()
+            return res
+
+        async def share(e=None) -> None:
+            res = await make()
+            if res is None:
+                return
+            try:
+                await service(ft.Share).share_files(
+                    [
+                        ft.ShareFile.from_bytes(
+                            res["html"].encode("utf-8"),
+                            mime_type="text/html",
+                            name=res["filename"],
+                        )
+                    ],
+                    subject=t("report_title") + " · " + _loc(detail.get("title")),
+                )
+            except Exception as err:  # no share sheet (web/desktop preview): open it instead
+                print(f"share failed, opening the report instead: {err}")
+                await service(ft.UrlLauncher).launch_url(state.api_base_url + res["url"])
+
+        async def open_in_browser(e=None) -> None:
+            res = await make()
+            if res is not None:
+                await service(ft.UrlLauncher).launch_url(state.api_base_url + res["url"])
+
+        dialog = ft.AlertDialog(
+            title=ft.Text(t("report_title")),
+            content=ft.Column(
+                [
+                    ft.Text(t("report_intro"), size=12, color=c["text_secondary"]),
+                    name,
+                    group,
+                    ft.Text("\n".join(summary), size=12, color=c["text_primary"]),
+                    status_text,
+                ],
+                tight=True,
+                spacing=8,
+            ),
+            actions=[
+                ft.TextButton(t("report_close"), on_click=lambda e: page.pop_dialog()),
+                ft.TextButton(
+                    t("report_open"), icon=ft.Icons.OPEN_IN_BROWSER, on_click=open_in_browser
+                ),
+                ft.Button(t("report_share"), icon=ft.Icons.SHARE, on_click=share, data="share"),
+            ],
+            data="report_dialog",
+        )
+        page.show_dialog(dialog)
+
     # ---- lab 12: the 3D model ------------------------------------------------
     def build_3d_panel(detail: Dict[str, Any]) -> ft.Control:
         url = api_client.lab_viewer_url(detail["viewer_path"])
         note = ft.Text("", size=12, color=c["text_secondary"])
 
         async def open_in_browser(e=None) -> None:
-            launcher = next((s for s in page.services if isinstance(s, ft.UrlLauncher)), None)
-            if launcher is None:
-                launcher = ft.UrlLauncher()
-                page.services.append(launcher)
-                page.update()
-            await launcher.launch_url(url)
+            await service(ft.UrlLauncher).launch_url(url)
 
         open_btn = ft.TextButton(
             t("lab3d_open_browser"), icon=ft.Icons.OPEN_IN_BROWSER, on_click=open_in_browser
@@ -884,11 +1029,13 @@ def build_labs_view(
                     total=msg.get("total"),
                     percent=int(round(float(msg.get("percent") or 0))),
                 )
-                if msg.get("passed"):
-                    await mark_passed(detail["id"])
+                await record_test(detail["id"], msg.get("percent"), bool(msg.get("passed")))
                 page.update()
             elif msg.get("type") == "check":
                 note.value = t("lab3d_checked", score=msg.get("score"), total=msg.get("total"))
+                data["check3d"][detail["id"]] = msg
+                if msg.get("ok") and msg.get("scenario"):
+                    await mark_task_done(detail["id"], f"scenario_{msg['scenario']}")
                 page.update()
 
         viewer = fwv.WebView(url=url, expand=True, bgcolor="#0B1220", on_console_message=on_console)

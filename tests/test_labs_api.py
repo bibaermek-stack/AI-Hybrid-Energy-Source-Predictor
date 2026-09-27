@@ -76,6 +76,56 @@ class TestLabsApi(unittest.TestCase):
             self.c.post("/labs/lab_pv_physics/tasks/zzz/check", json={"number": 1}).status_code, 404
         )
 
+    def test_report_is_rebuilt_on_the_server(self):
+        answers = correct_answers("lab_pv_physics")
+        r = self.c.post(
+            "/labs/lab_pv_physics/report",
+            json={
+                "student": "<b>Aigerim</b>",
+                "group": "EE-21",
+                "lang": "en",
+                "params": {"n": 120},
+                "answers": answers,
+                "tasks_done": ["eta_eff"],
+            },
+        )
+        self.assertEqual(r.status_code, 200)
+        rep = r.json()
+        self.assertEqual(rep["filename"], "lab01_report_b_Aigerim_b.html")
+        self.assertIn("&lt;b&gt;Aigerim&lt;/b&gt;", rep["html"])
+        self.assertIn("Best score: 100 %", rep["html"])
+        self.assertIn("<svg", rep["html"])
+        page = self.c.get(rep["url"])
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("text/html", page.headers["content-type"])
+        self.assertEqual(page.text, rep["html"])
+        self.assertEqual(self.c.get("/lab-reports/nope").status_code, 404)
+        self.assertEqual(
+            self.c.post(
+                "/labs/lab_grid_impact/report", json={"params": {"cable": "x"}}
+            ).status_code,
+            422,
+        )
+        self.assertEqual(
+            self.c.post("/labs/lab_pv_physics/report", json={"student": "x" * 200}).status_code,
+            422,
+        )
+
+    def test_3d_report_uses_the_3d_check(self):
+        rep = self.c.post(
+            "/labs/lab_inverter_wiring/report",
+            json={
+                "lang": "en",
+                "params": {"anything": 1},
+                "tasks_done": ["scenario_reversed_dc"],
+                "best_test_percent": 85,
+                "last_3d_check": {"score": 6, "total": 6, "ok": True},
+            },
+        ).json()
+        self.assertIn("Work in the 3D model", rep["html"])
+        self.assertIn("Last system check: 6 of 6 items right", rep["html"])
+        self.assertIn("Best score: 85 %", rep["html"])
+
     def test_tasks_come_as_flet_markdown(self):
         labs = {lab["id"]: lab for lab in self.c.get("/labs").json()["labs"]}
         self.assertEqual(labs["lab_pv_physics"]["task_count"], 3)

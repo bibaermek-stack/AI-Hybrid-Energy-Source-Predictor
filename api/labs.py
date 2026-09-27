@@ -11,9 +11,12 @@ inverter lab itself is a static page (static/lab3d/, served under
 
 from __future__ import annotations
 
+import secrets
+import time
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 router = APIRouter()
@@ -141,3 +144,85 @@ def grade(lab_id: str, req: GradeRequest) -> dict[str, Any]:
 
     _lab_or_404(lab_id)
     return grade_test(lab_id, req.answers, req.lang)
+
+
+# ---- the student's report ----------------------------------------------------
+# The report is rebuilt here from what the phone sends: the lab is run again
+# with the parameters and the test graded again from the answers, so the
+# results in it are the server's. The page is kept for an hour under a random
+# id, for the phone to open in the browser (print or save as PDF).
+REPORT_TTL_S = 3600
+REPORTS_KEPT = 300
+_reports: dict[str, tuple[float, str]] = {}
+
+
+class ReportRequest(BaseModel):
+    student: str = Field("", max_length=80)
+    group: str = Field("", max_length=40)
+    lang: str = "kk"
+    params: Optional[dict[str, Any]] = None
+    answers: Optional[dict[str, Any]] = None
+    tasks_done: list[str] = Field(default_factory=list, max_length=60)
+    best_test_percent: Optional[float] = Field(None, ge=0, le=100)
+    last_3d_check: Optional[dict[str, Any]] = None
+
+
+def _keep_report(page: str) -> str:
+    now = time.time()
+    for rid in [k for k, (until, _) in _reports.items() if until < now]:
+        del _reports[rid]
+    while len(_reports) >= REPORTS_KEPT:
+        del _reports[next(iter(_reports))]  # the oldest
+    rid = secrets.token_urlsafe(16)
+    _reports[rid] = (now + REPORT_TTL_S, page)
+    return rid
+
+
+@router.post("/labs/{lab_id}/report")
+def make_report(lab_id: str, req: ReportRequest) -> dict[str, Any]:
+    from src.education.labs.lab_tests import grade_test
+    from src.education.labs.report import build_report_html, report_filename
+    from src.education.labs.runner import run_lab
+
+    _lab_or_404(lab_id)
+    lang = "kk" if req.lang == "kk" else "en"
+    run_result = None
+    if req.params is not None and lab_id not in LABS_WITH_3D:
+        try:
+            run_result = run_lab(lab_id, req.params)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e)) from e
+    test_result = grade_test(lab_id, req.answers, lang) if req.answers else None
+    check = req.last_3d_check or {}
+    last_3d_check = (
+        {"score": int(check["score"]), "total": int(check["total"])}
+        if isinstance(check.get("score"), (int, float))
+        and isinstance(check.get("total"), (int, float))
+        else None
+    )
+    page = build_report_html(
+        lab_id,
+        lang,
+        student=req.student.strip(),
+        group=req.group.strip(),
+        run_result=run_result,
+        test_result=test_result,
+        best_test_percent=req.best_test_percent,
+        tasks_done=[t for t in req.tasks_done if isinstance(t, str) and len(t) <= 80],
+        last_3d_check=last_3d_check,
+    )
+    rid = _keep_report(page)
+    return {
+        "id": rid,
+        "url": f"/lab-reports/{rid}",
+        "filename": report_filename(lab_id, req.student),
+        "html": page,
+    }
+
+
+@router.get("/lab-reports/{rid}", response_class=HTMLResponse)
+def get_report(rid: str) -> HTMLResponse:
+    kept = _reports.get(rid)
+    if kept is None or kept[0] < time.time():
+        raise HTTPException(status_code=404, detail="The report has expired; make it again.")
+    return HTMLResponse(kept[1])
