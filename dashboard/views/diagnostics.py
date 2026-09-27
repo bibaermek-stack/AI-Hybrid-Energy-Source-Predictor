@@ -11,6 +11,7 @@ if str(_ROOT) not in sys.path:
 from dotenv import load_dotenv
 import streamlit as st
 
+from dashboard.components.fault_check import run_fault_check
 from dashboard.components.icons import icon_text
 from dashboard.utils.i18n import get_texts
 from dashboard.utils.models_loader import load_clean_dirty_model, load_yolo_model
@@ -240,7 +241,7 @@ def render(lang: str, texts: dict | None = None, models_status: dict | None = No
     st.markdown("---")
     st.markdown(f'<h4>{" AI Image-Based Soiling & Fault Detection" if lang == "en" else " Интеллектуалды сурет талдау жүйесі (Шаң/Ақаулықтар)"}</h4>', unsafe_allow_html=True)
     st.markdown(
-        f'<p style="color:#8b949e;">{"Upload a photo of a solar panel to analyze faults using our ResNet50 and YOLOv11 AI models." if lang == "en" else "Күн панелінің фотосуретін жүктеп, оны ResNet50 немесе YOLOv11 модельдері арқылы шаң немесе ақаулықтарға талдаңыз."}</p>',
+        f'<p style="color:#8b949e;">{"Upload a photo of a solar panel. The reliable check runs two models (YOLO26 + YOLO11) and answers only when they agree; otherwise it asks for a better photo." if lang == "en" else "Күн панелінің суретін жүктеңіз. Сенімді тексеру екі модельді (YOLO26 + YOLO11) қолданады және олар келіскенде ғана жауап береді, әйтпесе жақсырақ сурет сұрайды."}</p>',
         unsafe_allow_html=True
     )
 
@@ -248,6 +249,7 @@ def render(lang: str, texts: dict | None = None, models_status: dict | None = No
     model_choice = st.radio(
         "Диагностикалық модельді таңдаңыз / Select Diagnostic Model:" if lang == "kk" else "Select Diagnostic Model:",
         [
+            "Reliable check: YOLO26 + YOLO11 (recommended)" if lang == "en" else "Сенімді тексеру: YOLO26 + YOLO11 (ұсынылады)",
             "ResNet50 Classifier (Clean/Dirty)" if lang == "en" else "ResNet50 Классификаторы (Таза/Лас)",
             "YOLOv11 Object Detector (6-class Faults)" if lang == "en" else "YOLOv11 Объект детекторы (6-ақау түрі)"
         ],
@@ -273,7 +275,9 @@ def render(lang: str, texts: dict | None = None, models_status: dict | None = No
                         import numpy as np
                         from PIL import Image
                     
-                        if "ResNet50" in model_choice:
+                        if "YOLO26" in model_choice:
+                            run_fault_check(uploaded_file, lang)
+                        elif "ResNet50" in model_choice:
                             import tensorflow as tf
                             # Load model from cache
                             model = load_clean_dirty_model()

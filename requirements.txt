@@ -27,7 +27,7 @@ xgboost>=2.0
 pulp>=2.8
 
 # Computer vision / YOLO fault detection
-ultralytics>=8.0
+ultralytics>=8.4  # YOLO26 backbone of the fault diagnosis
 opencv-python-headless>=4.8
 Pillow>=10.0
 

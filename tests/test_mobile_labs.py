@@ -24,6 +24,13 @@ class FakePage:
         self.navigation_bar = self.appbar = None
         self.platform, self.web = platform, web
         self.tasks = []
+        self.dialogs = []
+
+    def show_dialog(self, dialog):
+        self.dialogs.append(dialog)
+
+    def pop_dialog(self):
+        return self.dialogs.pop() if self.dialogs else None
 
     def update(self, *args, **kwargs):
         pass
@@ -45,7 +52,7 @@ def walk(control):
             if f.name.startswith("_") or f.name in ("parent", "page"):
                 continue
             v = getattr(c, f.name, None)
-            for item in (v if isinstance(v, list) else [v]):
+            for item in v if isinstance(v, list) else [v]:
                 if ft is not None and isinstance(item, ft.BaseControl):
                     stack.append(item)
 
@@ -85,6 +92,19 @@ class _Api:
         return self.c.post(
             f"/labs/{lab_id}/test/grade", json={"answers": answers, "lang": "kk"}
         ).json()
+
+    async def lab_task_check(self, lab_id, task_id, number=None, choice_index=None):
+        return self.c.post(
+            f"/labs/{lab_id}/tasks/{task_id}/check",
+            json={"number": number, "choice_index": choice_index},
+        ).json()
+
+    async def lab_report(self, lab_id, payload):
+        return self.c.post(f"/labs/{lab_id}/report", json=payload).json()
+
+    @staticmethod
+    def cache_note(name):
+        return ""
 
     @staticmethod
     def lab_viewer_url(path):
@@ -182,6 +202,128 @@ class TestMobileLabs(unittest.TestCase):
                 self.assertTrue(back["h"]())
                 self.assertIsNone(back.get("h"))
                 self.assertIn("✅ Өтті", texts(view))
+
+            asyncio.run(scenario())
+
+    def test_practice_tasks_hint_then_solve_and_remember(self):
+        from mobile.views import labs_view
+
+        page, prefs, back = FakePage(), FakePrefs(), {}
+        with mock.patch.object(labs_view, "api_client", self.api):
+            view = labs_view.build_labs_view(page, lambda h: back.__setitem__("h", h), prefs)
+
+            async def scenario():
+                await view.data()
+                self.assertIn("Тапсырма 0/3", texts(view))
+                card = next(
+                    c
+                    for c in walk(view)
+                    if isinstance(c, ft.Container) and c.data == "lab_pv_physics"
+                )
+                card.on_click(None)
+                await self._drain(page)
+                seg = next(c for c in walk(view) if isinstance(c, ft.SegmentedButton))
+                seg.selected = ["tasks"]
+                seg.on_change(mock.Mock(control=seg))
+                # Formulas reach Flet's Markdown with a space after each closing $
+                prompts = [c.value for c in walk(view) if isinstance(c, ft.Markdown)]
+                self.assertTrue(any("$P_{DC}$ …" in p for p in prompts), prompts)
+
+                field = next(
+                    c for c in walk(view) if isinstance(c, ft.TextField) and c.data == "eta_eff"
+                )
+                check = next(
+                    c for c in walk(view) if isinstance(c, ft.Button) and c.data == "check:eta_eff"
+                )
+                field.value = "abc"
+                await check.on_click(None)
+                self.assertTrue(any("Сан енгізіңіз" in t for t in texts(view)))
+
+                field.value = "0,5"  # wrong; a comma decimal is accepted
+                await check.on_click(None)
+                self.assertTrue(any("Қате" in t for t in texts(view)))
+                self.assertNotIn("eta_eff", prefs.store.get("ecopredict.labs_tasks_done", ""))
+
+                field.value = "0,184"
+                await check.on_click(None)
+                self.assertTrue(any("Дұрыс" in t for t in texts(view)))
+                self.assertEqual(
+                    json.loads(prefs.store["ecopredict.labs_tasks_done"]),
+                    {"lab_pv_physics": ["eta_eff"]},
+                )
+                self.assertIn("Орындалды: 3 тапсырманың 1-і", texts(view))
+
+                self.assertTrue(back["h"]())
+                self.assertIn("Тапсырма 1/3", texts(view))
+
+            asyncio.run(scenario())
+
+    def test_report_is_built_on_the_server_and_shared(self):
+        from mobile.views import labs_view
+
+        page, prefs, back = FakePage(), FakePrefs(), {}
+        shared = mock.AsyncMock()
+        with (
+            mock.patch.object(labs_view, "api_client", self.api),
+            mock.patch.object(ft.Share, "share_files", shared),
+        ):
+            view = labs_view.build_labs_view(page, lambda h: back.__setitem__("h", h), prefs)
+
+            async def scenario():
+                await view.data()
+                card = next(
+                    c
+                    for c in walk(view)
+                    if isinstance(c, ft.Container) and c.data == "lab_pv_physics"
+                )
+                card.on_click(None)
+                await self._drain(page)
+                run_btn = next(
+                    c for c in walk(view) if isinstance(c, ft.Button) and "Іске қосу" in texts(c)
+                )
+                await run_btn.on_click(None)
+                await self._drain(page)
+                seg = next(c for c in walk(view) if isinstance(c, ft.SegmentedButton))
+                seg.selected = ["test"]
+                seg.on_change(mock.Mock(control=seg))
+                from src.education.labs.lab_tests import correct_answers
+
+                right = correct_answers("lab_pv_physics")
+                for qid, c in self._fields(view).items():
+                    c.value = str(right[qid]) if isinstance(c, ft.RadioGroup) else f"{right[qid]}"
+                submit = next(
+                    c
+                    for c in walk(view)
+                    if isinstance(c, ft.Button) and "Тестті тапсыру" in texts(c)
+                )
+                await submit.on_click(None)
+                self.assertEqual(
+                    json.loads(prefs.store["ecopredict.labs_best"]), {"lab_pv_physics": 100.0}
+                )
+
+                report_btn = next(
+                    c for c in walk(view) if isinstance(c, ft.IconButton) and c.data == "report"
+                )
+                report_btn.on_click(None)
+                dialog = page.dialogs[-1]
+                fields = {c.label: c for c in walk(dialog) if isinstance(c, ft.TextField)}
+                fields["Аты-жөні"].value = "Айгерім Сәдуақасова"
+                fields["Тобы"].value = "ЭЭ-21"
+                self.assertTrue(any("Соңғы іске қосу: бар" in t for t in texts(dialog)))
+                share = next(
+                    c for c in walk(dialog) if isinstance(c, ft.Button) and c.data == "share"
+                )
+                await share.on_click(None)
+
+                files = shared.await_args.args[0]
+                self.assertEqual(files[0].name, "lab01_report_Aigerim_Saduaqasova.html")
+                page_html = files[0].data.decode("utf-8")
+                for needle in ("Айгерім Сәдуақасова", "ЭЭ-21", "Панель саны", "<svg", "100 %"):
+                    self.assertIn(needle, page_html)
+                self.assertEqual(
+                    json.loads(prefs.store["ecopredict.student"]),
+                    {"name": "Айгерім Сәдуақасова", "group": "ЭЭ-21"},
+                )
 
             asyncio.run(scenario())
 

@@ -5,7 +5,9 @@
 # feature routes are not mounted — the state a Railway service with
 # Root Directory = mobile ends up in, where every screen 404s.
 # Missing optional server configuration (Solarman credentials, WeatherAPI key)
-# is reported as a warning, not a failure.
+# is reported as a warning, not a failure. The labs API and the 3D lab page
+# must answer: the app's Labs screen is built on them. The fault check must
+# load both of its models (src/fault_detection/diagnosis.py).
 
 name: Backend health
 
@@ -16,6 +18,8 @@ on:
   push:
     paths:
       - "mobile/config.py"
+      - "api/labs.py"
+      - "src/fault_detection/**"
       - ".github/workflows/backend-health.yml"
 
 permissions:
@@ -114,4 +118,83 @@ jobs:
                   print(f"OK: {name}")
               else:
                   print(f"::warning::{name} -> {status} (server not redeployed from main yet?)")
+
+          # The 12 labs in the app (api/labs.py) and the 3D lab page it opens.
+          # These are on main, so a failure here is a broken deploy, not a lag.
+          problems = []
+          code, labs = get("/labs")
+          labs = labs.get("labs") if isinstance(labs, dict) else None
+          if code != 200 or not labs or len(labs) != 12:
+              problems.append(f"/labs -> {code}, {len(labs or [])} labs")
+          else:
+              print("OK: /labs lists the 12 labs")
+              if "task_count" not in labs[0]:
+                  print("::warning::/labs has no task_count (server not redeployed from main yet?)")
+          code, lab = get("/labs/lab_pv_physics")
+          if code != 200 or not isinstance(lab, dict) or not lab.get("params") or not lab.get("tasks"):
+              problems.append(f"/labs/lab_pv_physics -> {code}")
+          else:
+              print(f"OK: lab 1 has {len(lab['params'])} parameters and {len(lab['tasks'])} tasks")
+          req = urllib.request.Request(
+              base + "/labs/lab_pv_physics/run", data=b'{"params": {}}',
+              headers={"Content-Type": "application/json"}, method="POST")
+          try:
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  run = json.loads(r.read())
+              print(f"OK: lab 1 ran, {len(run.get('metrics') or [])} metrics")
+          except Exception as e:
+              problems.append(f"POST /labs/lab_pv_physics/run -> {e}")
+          code, test = get("/labs/lab_pv_physics/test?lang=kk")
+          if code != 200 or not isinstance(test, dict) or not test.get("questions"):
+              problems.append(f"/labs/lab_pv_physics/test -> {code}")
+          else:
+              print(f"OK: lab 1 test has {len(test['questions'])} questions")
+          for path in ("/static/lab3d/index.html", "/static/lab3d/lab3d.js", "/static/lab3d/assembly.json"):
+              code, _ = get(path)
+              if code != 200:
+                  problems.append(f"{path} -> {code}")
+          if not problems:
+              print("OK: the 3D lab page and its files are served")
+          if problems:
+              raise SystemExit("::error::Labs API broken: " + "; ".join(problems))
+
+          # Classes (api/classroom.py): results must survive a redeploy.
+          code, room = get("/classes/status")
+          if code != 200 or not isinstance(room, dict):
+              print(f"::warning::/classes/status -> {code} (server not redeployed from main yet?)")
+          elif not room.get("ok"):
+              raise SystemExit(f"::error::Class storage ({room.get('backend')}) does not answer: {room.get('error')}")
+          elif not room.get("persistent"):
+              print("::warning::Class results are in a local file and are lost on every deploy: "
+                    "attach the project's Postgres (DATABASE_URL) to the service.")
+          else:
+              print(f"OK: class results stored in {room.get('backend')}")
+
+          # Fault check: the fault detector's weights and the YOLO26 heads load,
+          # and a noise image (one of the placeholders) is refused as not a panel.
+          code, card = get("/detect/model")
+          if code == 404:
+              print("::warning::/detect/model -> 404 (server not redeployed from main yet?)")
+          elif code != 200 or not isinstance(card, dict):
+              raise SystemExit(f"::error::Fault diagnosis unavailable: /detect/model -> {code} {card}")
+          else:
+              if not card.get("detector_weights_present") or "detect/train" not in card.get("detector_weights", ""):
+                  raise SystemExit(f"::error::Fault detector weights missing: {card.get('detector_weights')}")
+              import glob, uuid
+              noise = sorted(glob.glob("data/solar-panel-images/Faulty_solar_panel/*/*.jpg"))[0]
+              boundary = uuid.uuid4().hex
+              body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"noise.jpg\"\r\n"
+                      "Content-Type: image/jpeg\r\n\r\n").encode() + open(noise, "rb").read() + f"\r\n--{boundary}--\r\n".encode()
+              req = urllib.request.Request(base + "/detect", data=body, method="POST",
+                                           headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+              try:
+                  with urllib.request.urlopen(req, timeout=120) as r:
+                      res = json.loads(r.read())
+              except Exception as e:
+                  raise SystemExit(f"::error::POST /detect -> {e}")
+              diag = res.get("diagnosis") or {}
+              if diag.get("status") != "not_panel":
+                  raise SystemExit(f"::error::Fault diagnosis on noise: {diag.get('status')} {res.get('diagnosis_error')}")
+              acc = (card.get("metrics") or {}).get("expected_accuracy", {})
+              print(f"OK: fault check loads both models; noise refused; confirmed answers measured {acc.get('confirmed')}")
           EOF

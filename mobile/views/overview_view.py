@@ -5,10 +5,12 @@ Overview / Home View for EcoPredict AI Mobile.
 import flet as ft
 from typing import Callable
 try:
+    from mobile import solar_alerts
     from mobile.state import state
     from mobile.api_client import api_client
     from mobile.components.metric_card import build_metric_card
 except (ImportError, ModuleNotFoundError):
+    import solar_alerts  # type: ignore # pyright: ignore[reportMissingImports]
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
     from components.metric_card import build_metric_card  # type: ignore # pyright: ignore[reportMissingImports]
@@ -266,10 +268,9 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
             state.load_kw,
             state.battery_kw,
         )
-        _set(
-            ref_scenario,
-            t("ov_scenario_detail", irr=state.irradiation, wind=state.wind_speed, load=state.load_kw),
-        )
+        scenario = t("ov_scenario_detail", irr=state.irradiation, wind=state.wind_speed, load=state.load_kw)
+        note = api_client.cache_note("predict")
+        _set(ref_scenario, f"{note}\n{scenario}" if note else scenario)
         if pred:
             _set(ref_solar, f"{float(pred.get('solar_power', 0.0)):.1f}")
             _set(ref_wind, f"{float(pred.get('wind_power', 0.0)):.1f}")
@@ -291,7 +292,9 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         ac = (gen.get("ac") or [{}])[0]
         if gen:
             demo = api_client.is_demo(live)
-            _set(ref_live_title, t("ov_live_title_demo") if demo else t("ov_live_title_live"))
+            title = t("ov_live_title_demo") if demo else t("ov_live_title_live")
+            note = api_client.cache_note("live")
+            _set(ref_live_title, f"{title} · {note}" if note else title)
             if ref_live_title.current is not None:
                 ref_live_title.current.color = c["warning"] if demo else c["text_primary"]
             _set(ref_pv_v, f"{dc.get('voltage_v', 0)} V")
@@ -307,8 +310,52 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
     # still swapping the splash screen for the dashboard, and a concurrent
     # page.update() from this task raced that transition. main() kicks off the
     # first load once the dashboard is actually mounted.
+    # Station alerts (solar_alerts, checked by main.py): a red card on top.
+    alert_lines = ft.Column(spacing=2)
+    alert_card = ft.Container(
+        content=ft.Column(
+            [
+                ft.Row(
+                    [
+                        ft.Icon(ft.Icons.WARNING_AMBER_ROUNDED, color=c["error"], size=20),
+                        ft.Text(t("alert_title"), weight=ft.FontWeight.BOLD, color=c["error"], expand=True),
+                    ],
+                    spacing=8,
+                ),
+                alert_lines,
+                ft.TextButton(
+                    t("alert_open"),
+                    icon=ft.Icons.SENSORS,
+                    on_click=lambda e: on_navigate_key("live"),
+                ),
+            ],
+            spacing=6,
+        ),
+        padding=12,
+        border_radius=14,
+        bgcolor=ft.Colors.with_opacity(0.12, c["error"]),
+        border=ft.Border.all(1, c["error"]),
+        visible=False,
+        data="station_alerts",
+    )
+
+    def render_alerts(alerts) -> None:
+        alert_card.visible = bool(alerts)
+        alert_lines.controls = [
+            ft.Text(
+                "• " + solar_alerts.describe(a, t),
+                size=12,
+                color=c["error"] if a.get("level") == "error" else c["warning"],
+            )
+            for a in alerts
+        ]
+
+    render_alerts(state.solar_alerts)
+    state.alert_listeners["overview"] = render_alerts
+
     view = ft.ListView(
         controls=[
+            alert_card,
             hero_card,
             ft.Container(height=10),
             kpi_grid,

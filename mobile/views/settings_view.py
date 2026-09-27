@@ -6,7 +6,7 @@ main.py listens, saves them to SharedPreferences and rebuilds every screen.
 """
 
 import flet as ft
-from typing import Callable
+from typing import Callable, Optional
 try:
     from mobile.config import APP_VERSION
     from mobile.state import state
@@ -17,7 +17,11 @@ except (ImportError, ModuleNotFoundError):
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
 
 
-def build_settings_view(page: ft.Page, on_status_change: Callable[[], None]) -> ft.Control:
+def build_settings_view(
+    page: ft.Page,
+    on_status_change: Callable[[], None],
+    on_alerts_toggle: Optional[Callable[[bool], None]] = None,
+) -> ft.Control:
     """Build application configuration and network diagnostics screen."""
     c = state.colors
     t = state.text
@@ -131,6 +135,14 @@ def build_settings_view(page: ft.Page, on_status_change: Callable[[], None]) -> 
             ft.Divider(height=1, color=c["card_border"]),
             ft.Text(t("st_theme"), weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             rg_theme,
+            ft.Divider(height=1, color=c["card_border"]),
+            ft.Switch(
+                label=t("st_alerts"),
+                value=state.alerts_enabled,
+                on_change=lambda e: on_alerts_toggle and on_alerts_toggle(bool(e.control.value)),
+                data="alerts_switch",
+            ),
+            ft.Text(t("st_alerts_note"), size=11, color=c["text_secondary"]),
             ft.Text(t("st_saved_note"), size=11, color=c["text_secondary"]),
         ],
         c["surface"],

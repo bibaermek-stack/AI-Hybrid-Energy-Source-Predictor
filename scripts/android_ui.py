@@ -31,6 +31,8 @@ def dump() -> ET.Element:
     # published its semantics; take the richer of two.
     best = None
     for _ in range(2):
+        # Remove the last dump first, or a failed dump reads the old screen.
+        adb("shell", "rm", "-f", "/sdcard/ui.xml")
         adb("shell", "uiautomator", "dump", "/sdcard/ui.xml")
         xml = adb("exec-out", "cat", "/sdcard/ui.xml")
         try:

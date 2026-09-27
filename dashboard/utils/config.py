@@ -16,6 +16,7 @@ SOLARMAN_PROCESS_URL = os.getenv("SOLARMAN_PROCESS_URL", "http://127.0.0.1:8001/
 SOLARMAN_ROI_URL = os.getenv("SOLARMAN_ROI_URL", "http://127.0.0.1:8001/solarman/roi")
 SOLARMAN_WEATHER_URL = os.getenv("SOLARMAN_WEATHER_URL", "http://127.0.0.1:8001/solarman/weather")
 SOLARMAN_ALERT_URL = os.getenv("SOLARMAN_ALERT_URL", "http://127.0.0.1:8001/solarman/alert")
+DETECT_URL = os.getenv("DETECT_URL", "http://127.0.0.1:8001/detect")
 SOLARMAN_FC_URL = os.getenv("SOLARMAN_FC_URL", "http://127.0.0.1:8001/solarman/forecast")
 SOLARMAN_LIVE_URL = os.getenv("SOLARMAN_LIVE_URL", "http://127.0.0.1:8001/solarman/live")
 SOLARMAN_HISTORY_URL = os.getenv("SOLARMAN_HISTORY_URL", "http://127.0.0.1:8001/solarman/history")

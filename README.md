@@ -18,7 +18,7 @@ Stack: **FastAPI** · **Streamlit** · **RandomForest / XGBoost / LSTM** · **YO
 | Fault diagnostics | YOLOv11 + clean/dirty CNN (weights optional offline) |
 | AI advisor | EN/KK RAG (ChromaDB) |
 | Sustainability | CO₂, LCOE, ROI, payback, NPV helpers |
-| **Education labs (12)** | Theory EN/KK · KaTeX · run on one shared engine · practice tasks · graded test per lab · 3D inverter model · website + Android/iOS |
+| **Education labs (12)** | Theory EN/KK · KaTeX · run on one shared engine · practice tasks · graded test per lab · printable report · 3D inverter model · website + Android/iOS |
 
 **Languages:** English + Қазақша (UI).
 
@@ -45,6 +45,18 @@ How the pieces fit:
   The website (`dashboard/views/labs.py`) and the phone (`POST /labs/{id}/run`) both call it.
 - `src/education/labs/lab_tests.py` — the final test of each lab (5 questions, 7 for the 3D lab; pass mark 70 %).
   "Run" questions are graded with the engine itself; 3D questions are answered by tapping the model or fixing a board.
+- Practice tasks (`src/education/lab_tasks.py`) are checked one by one on the site and in the app's Tasks tab:
+  a wrong answer opens the hint, a right one shows the worked solution.
+- `src/education/labs/report.py` — the student's report (site: **Report** tab): name, group, parameters and results
+  of the last run with charts, tasks solved, test score, room for the conclusion. One HTML file, prints to PDF, works
+  offline. The same tab shows the progress in all 12 labs.
+- Progress is kept across visits: on the site in the browser's localStorage (`dashboard/components/progress_store.py`),
+  in the app in SharedPreferences.
+- Classes (`api/classroom.py`): a teacher creates a class in the app (More → Teacher) and gives its code to the
+  students, who join under Labs. The server records what it grades (lab tests, practice tasks, lesson quizzes) under
+  the student; the teacher reads the table in the app or at `/static/classroom/index.html` (code + teacher key; only
+  the key's hash is stored). Storage: the service's Postgres (`DATABASE_URL`, tables `classroom_*`), else SQLite at
+  `$CLASSROOM_DB` / `data/classroom.sqlite3` for local runs. `GET /classes/status` says which and whether it answers.
 - `static/lab3d/` — the 3D viewer (three.js bundled locally, no CDN), meshes and `assembly.json` (which mesh is
   which part, kk/en). Rebuild meshes and `lab_state.json` with `python scripts/build_lab3d_assets.py`;
   `tests/test_lab3d_assets.py` fails when they are stale. On the site it is a Streamlit component
@@ -228,6 +240,10 @@ python -m unittest discover -s tests -v
 | GET / POST | `/labs/{id}/test`, `/labs/{id}/test/grade` | The lab's test without answers; grading |
 | POST | `/labs/{id}/tasks/{task}/check` | Check a practice task |
 | GET | `/static/lab3d/index.html` | 3D inverter lab (used by the app's WebView) |
+| POST / GET | `/labs/{id}/report`, `/lab-reports/{id}` | The student's report, rebuilt on the server; its page for an hour |
+| GET / POST | `/learn/lessons`, `/learn/lessons/{id}`, `/learn/quizzes/{id}`, `/learn/quizzes/{id}/grade` | Learn lessons (Flet Markdown) and their quizzes |
+| POST / GET / DELETE | `/classes`, `/classes/{code}/join`, `/classes/{code}/results`, `/classes/{code}/students/{id}` | Classes: create, join, the teacher's table (`X-Teacher-Key`), remove a student |
+| GET | `/static/classroom/index.html` | The class table on a computer |
 
 🔒 = requires the `X-API-Key` header matching `ECOPREDICT_API_KEY`. These two routes
 read/write the Solarman credentials the whole process authenticates with, and the API

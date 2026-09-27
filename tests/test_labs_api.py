@@ -76,6 +76,78 @@ class TestLabsApi(unittest.TestCase):
             self.c.post("/labs/lab_pv_physics/tasks/zzz/check", json={"number": 1}).status_code, 404
         )
 
+    def test_report_is_rebuilt_on_the_server(self):
+        answers = correct_answers("lab_pv_physics")
+        r = self.c.post(
+            "/labs/lab_pv_physics/report",
+            json={
+                "student": "<b>Aigerim</b>",
+                "group": "EE-21",
+                "lang": "en",
+                "params": {"n": 120},
+                "answers": answers,
+                "tasks_done": ["eta_eff"],
+            },
+        )
+        self.assertEqual(r.status_code, 200)
+        rep = r.json()
+        self.assertEqual(rep["filename"], "lab01_report_b_Aigerim_b.html")
+        self.assertIn("&lt;b&gt;Aigerim&lt;/b&gt;", rep["html"])
+        self.assertIn("Best score: 100 %", rep["html"])
+        self.assertIn("<svg", rep["html"])
+        page = self.c.get(rep["url"])
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("text/html", page.headers["content-type"])
+        self.assertEqual(page.text, rep["html"])
+        self.assertEqual(self.c.get("/lab-reports/nope").status_code, 404)
+        self.assertEqual(
+            self.c.post(
+                "/labs/lab_grid_impact/report", json={"params": {"cable": "x"}}
+            ).status_code,
+            422,
+        )
+        self.assertEqual(
+            self.c.post("/labs/lab_pv_physics/report", json={"student": "x" * 200}).status_code,
+            422,
+        )
+
+    def test_3d_report_uses_the_3d_check(self):
+        rep = self.c.post(
+            "/labs/lab_inverter_wiring/report",
+            json={
+                "lang": "en",
+                "params": {"anything": 1},
+                "tasks_done": ["scenario_reversed_dc"],
+                "best_test_percent": 85,
+                "last_3d_check": {"score": 6, "total": 6, "ok": True},
+            },
+        ).json()
+        self.assertIn("Work in the 3D model", rep["html"])
+        self.assertIn("Last system check: 6 of 6 items right", rep["html"])
+        self.assertIn("Best score: 85 %", rep["html"])
+
+    def test_tasks_come_as_flet_markdown(self):
+        labs = {lab["id"]: lab for lab in self.c.get("/labs").json()["labs"]}
+        self.assertEqual(labs["lab_pv_physics"]["task_count"], 3)
+        tasks = self.c.get("/labs/lab_pv_physics").json()["tasks"]
+        choice = next(t for t in tasks if t["kind"] == "choice")
+        # "$P_{DC}$ becomes" keeps its space; the choices stay plain text
+        self.assertIn("$P_{DC}$ becomes", choice["prompt"]["en"])
+        self.assertTrue(all(isinstance(ch, dict) for ch in choice["choices"]))
+        # "$P_{DC}$…" is glued: Flet's Markdown needs the space to close the math
+        double = next(t for t in tasks if t["id"] == "double_g")
+        self.assertIn("$P_{DC}$ …", double["prompt"]["kk"])
+        hint = next(
+            t
+            for t in self.c.get("/labs/lab_bess_soc").json()["tasks"]
+            if t["id"] == "soc_after_charge"
+        )["hint"]["kk"]
+        self.assertIn("$E_{cap}$ -қа", hint)
+        explain = self.c.post(
+            "/labs/lab_pv_physics/tasks/eta_eff/check", json={"number": 0.184}
+        ).json()["explain_kk"]
+        self.assertIn("$\\eta_{eff}=0.20", explain)
+
 
 class TestTheoryForFlet(unittest.TestCase):
     def test_suffix_after_inline_math_is_spaced(self):

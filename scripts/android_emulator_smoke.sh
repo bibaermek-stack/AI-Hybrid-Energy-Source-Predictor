@@ -5,8 +5,9 @@
 #   3. Back from a More screen returns to More,
 #   4. Back on Home closes the app,
 #   5. the camera opens and a capture reaches the diagnosis,
-#   6. the labs: the list loads, lab 1 runs on the server, Back returns to the
-#      list, and lab 12's 3D model loads in the WebView with WebGL. Until the
+#   6. the labs: the list loads, lab 1 runs on the server and has practice
+#      tasks, Back returns to the list, and lab 12's 3D model loads in the
+#      WebView with WebGL. Until the
 #      server the APK talks to serves /labs this step is reported, not failed.
 # Screenshots, UI dumps and logcat go to $OUT for the workflow artifact.
 set -uo pipefail
@@ -23,16 +24,40 @@ echo "APK=$APK PKG=$PKG"
 failures=0
 pass() { echo "PASS: $*"; }
 fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
-shot() { adb exec-out screencap -p > "$OUT/$1.png"; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb exec-out cat /sdcard/ui.xml > "$OUT/$1.xml"; }
+# The dump file is removed first: when uiautomator cannot dump (a WebGL view
+# that never goes idle), the previous screen's dump must not stand in for it.
+shot() {
+  dismiss_anr
+  adb exec-out screencap -p > "$OUT/$1.png"
+  adb shell rm -f /sdcard/ui.xml
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  adb exec-out cat /sdcard/ui.xml > "$OUT/$1.xml" 2>/dev/null || : > "$OUT/$1.xml"
+}
 in_front() { adb shell dumpsys window | grep -E "mCurrentFocus=|mFocusedApp=" | grep -q "$PKG"; }
 # Visible labels of a saved UI dump, one per line (for evidence in the log).
 labels_of() { grep -oE '(text|content-desc)="[^"]+"' "$OUT/$1.xml" | sed -E 's/^[a-z-]+="//; s/"$//' | tr '\n' '|' ; echo; }
+# On a slow emulator a system app (seen: Pixel Launcher) can stop answering
+# and its "isn't responding" dialog covers our app. "Wait" leaves both running.
+# Our own app not responding is a failure, not something to click away.
+dismiss_anr() {
+  local anr
+  anr="$(adb shell dumpsys window | grep -oE 'Application Not Responding: [A-Za-z0-9_.]+' | head -n 1)"
+  [ -z "$anr" ] && return 0
+  if echo "$anr" | grep -q "$PKG"; then
+    fail "the app itself is not responding ($anr)"
+    return 0
+  fi
+  echo "NOTE: $anr covered the screen; tapping Wait"
+  $UI tap "Wait" >/dev/null 2>&1 || adb shell input keyevent KEYCODE_BACK
+  sleep 2
+}
 launch() {
   adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
   # Python start-up plus the splash and first health check take a while on
   # an emulator; wait for the bottom bar rather than a fixed delay.
   for _ in $(seq 1 60); do
     if $UI has "Басты" --prefix >/dev/null 2>&1; then return 0; fi
+    dismiss_anr
     sleep 3
   done
   return 1
@@ -46,8 +71,27 @@ adb install -r "$APK" || { echo "FAIL: install"; exit 1; }
 adb shell pm grant "$PKG" android.permission.CAMERA || true
 adb logcat -c
 
+# What was on screen and what the app logged, when a launch never got to Home.
+launch_evidence() {
+  shot "$1"
+  echo "screen: $(labels_of "$1")"
+  echo "focus: $(adb shell dumpsys window | grep -E 'mCurrentFocus=|mFocusedApp=' | tr -s ' ' | tr '\n' ' ')"
+  local pid
+  pid="$(adb shell pidof "$PKG" | tr -d '\r')"
+  echo "---- app log (pid ${pid:-none}, last lines) ----"
+  if [ -n "$pid" ]; then adb logcat -d --pid="$pid" | tail -n 60; fi
+  adb logcat -d | grep -E "ANR in|FATAL EXCEPTION|isn't responding" | tail -n 10
+}
+
 # 1. launch
-if launch; then pass "app launched and shows the bottom bar"; else fail "app did not reach the home screen"; fi
+if launch; then
+  pass "app launched and shows the bottom bar"
+else
+  fail "app did not reach the home screen"
+  launch_evidence 00_launch_failed
+  adb logcat -d > "$OUT/logcat.txt"
+  exit "$failures"  # every later step starts from Home
+fi
 sleep 5
 shot 01_home
 in_front && pass "app is in front after launch" || fail "app not in front after launch"
@@ -107,8 +151,10 @@ if launch; then
       sleep 25
       shot 08_after_capture
       echo "after capture: $(labels_of 08_after_capture)"
-      if grep -qE "Анықталды|Ақау табылмады" "$OUT/08_after_capture.xml"; then
-        pass "camera capture went through YOLO and got an answer"
+      # the diagnosis (confirmed / likely / uncertain / not a panel / retake;
+      # the emulator's fake camera is rarely a panel), or an older server's YOLO answer
+      if grep -qE "Расталды|Ықтимал|Нақты емес|күн панелі емес|Суретті қайта түсіріңіз|Анықталды|Ақау табылмады" "$OUT/08_after_capture.xml"; then
+        pass "camera capture reached the fault check and got an answer"
       elif grep -q "Диагноз орындалмады" "$OUT/08_after_capture.xml"; then
         echo "NOTE: capture uploaded but the server did not diagnose it (see labels above)"
       else
@@ -121,11 +167,12 @@ if launch; then
   fi
 else
   echo "NOTE: relaunch for the camera step failed"
+  launch_evidence 07_relaunch_failed
 fi
 
 # 6. labs
 labs_step() {
-  launch || { echo "NOTE: relaunch for the labs step failed"; return; }
+  launch || { echo "NOTE: relaunch for the labs step failed"; launch_evidence 09_relaunch_failed; return; }
   tap_tab "Тағы" 4
   sleep 3
   $UI tap "Зертханалар" --prefix || { fail "Labs tile not found under More"; return; }
@@ -146,13 +193,28 @@ labs_step() {
   $UI tap "Күн қуаты және ауа райы" --contains || { fail "lab 1 card not tappable"; return; }
   sleep 5
   $UI tap "Іске қосу" --prefix || fail "Run button not found in lab 1"
+  # The app scrolls to the results after a run; swipe once more if they are
+  # still off screen after a while.
   local ran=""
-  for _ in $(seq 1 15); do
+  for i in $(seq 1 15); do
     if $UI has "DC қуаты P_DC" --contains >/dev/null 2>&1; then ran=yes; break; fi
+    [ "$i" = 8 ] && $UI swipe up
     sleep 2
   done
   shot 10_lab1_result
   [ -n "$ran" ] && pass "lab 1 ran on the server and shows its result" || fail "lab 1 result not shown: $(labels_of 10_lab1_result)"
+
+  if $UI tap "Тапсырма"; then
+    sleep 3
+    shot 10b_lab1_tasks
+    if $UI has "Тексеру" >/dev/null 2>&1; then
+      pass "lab 1 practice tasks tab shows tasks to check"
+    else
+      fail "lab 1 tasks tab has no Check button: $(labels_of 10b_lab1_tasks)"
+    fi
+  else
+    fail "Tasks tab not found in lab 1"
+  fi
 
   adb shell input keyevent KEYCODE_BACK
   sleep 3

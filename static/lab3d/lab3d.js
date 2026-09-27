@@ -24,6 +24,8 @@ import {
 const LAB_ID = 'lab_inverter_wiring';
 const Q = new URLSearchParams(location.search);
 const IN_STREAMLIT = Q.has('streamlitUrl');
+// A class member (the app passes ?class=&token=): the server records the test.
+const STUDENT = Q.get('class') && Q.get('token') ? { class_code: Q.get('class'), token: Q.get('token') } : null;
 
 const UI = {
   en: {
@@ -652,7 +654,7 @@ async function submitTest() {
   render();
   try {
     const r = await getJSON(`${S.api}/labs/${LAB_ID}/test/grade`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, lang: S.lang }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, lang: S.lang, student: STUDENT }),
     });
     S.test.result = r;
     emit({ type: 'test_result', score: r.score, total: r.total, percent: r.percent, passed: r.passed });

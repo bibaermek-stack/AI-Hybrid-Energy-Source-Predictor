@@ -3,18 +3,22 @@ Async REST API Client for EcoPredict AI Backend using Python standard library.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
 try:
+    from mobile import offline_cache
     from mobile.config import DEFAULT_API_BASE
     from mobile.state import state
 except (ImportError, ModuleNotFoundError):
+    import offline_cache  # type: ignore # pyright: ignore[reportMissingImports]
     from config import DEFAULT_API_BASE  # type: ignore # pyright: ignore[reportMissingImports]
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
 
@@ -61,8 +65,7 @@ def _http_get_sync(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
     global last_http_error
     try:
         req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "EcoPredict-Mobile/1.0", "Accept": "application/json"}
+            url, headers={"User-Agent": "EcoPredict-Mobile/1.0", "Accept": "application/json"}
         )
         with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
             if resp.status == 200:
@@ -78,7 +81,9 @@ def _http_get_sync(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) -> Optional[Dict[str, Any]]:
+def _http_post_sync(
+    url: str, payload: Dict[str, Any], timeout: float = 10.0
+) -> Optional[Dict[str, Any]]:
     """Synchronous HTTP POST using urllib.request."""
     global last_http_error
     try:
@@ -104,6 +109,48 @@ def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) ->
     except Exception as e:
         last_http_error = f"{type(e).__name__}: {e}"
         logger.warning("HTTP POST error for %s: %s", url, e)
+    return None
+
+
+def _http_json_sync(
+    method: str,
+    url: str,
+    payload: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 20.0,
+) -> Optional[Dict[str, Any]]:
+    """Any method with a JSON body and extra headers (the classroom routes)."""
+    global last_http_error
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "EcoPredict-Mobile/1.0",
+                "Accept": "application/json",
+                **(headers or {}),
+            },
+            method=method,
+        )
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8"))
+            last_http_error = f"HTTP {resp.status} from {url}"
+    except urllib.error.HTTPError as e:
+        last_http_error = _describe_http_error(e)
+        logger.warning("HTTP %s %s rejected: %s", method, url, last_http_error)
+    except Exception as e:
+        last_http_error = f"{type(e).__name__}: {e}"
+        logger.warning("HTTP %s error for %s: %s", method, url, e)
+    return None
+
+
+def _student() -> Optional[Dict[str, str]]:
+    """The class this phone joined, sent with every graded answer."""
+    room = state.classroom
+    if room and room.get("code") and room.get("token"):
+        return {"class_code": room["code"], "token": room["token"]}
     return None
 
 
@@ -163,6 +210,54 @@ class APIClient:
 
     def __init__(self, timeout: float = 25.0):
         self.timeout = timeout
+        # screen data name -> when the reply now shown was saved, while a screen
+        # shows a saved reply because the server could not be reached
+        self.cache_hits: Dict[str, float] = {}
+
+    async def _with_cache(self, name: str, key: str, fetch) -> Any:
+        """
+        Run fetch (a blocking HTTP call) off the event loop. A good reply is
+        saved on the phone under key; when there is none (offline, server
+        down) the saved one is returned and cache_hits[name] says from when.
+        """
+        res = await asyncio.to_thread(fetch)
+        if res is not None:
+            offline_cache.put(key, res)
+            self.cache_hits.pop(name, None)
+            return res
+        saved = offline_cache.get(key)
+        if saved is None:
+            self.cache_hits.pop(name, None)
+            return None
+        self.cache_hits[name] = saved[1]
+        return saved[0]
+
+    def _get(self, name: str, path: str, timeout: Optional[float] = None):
+        return self._with_cache(
+            name,
+            f"GET {path}",
+            lambda: _http_get_sync(f"{state.api_base_url}{path}", timeout or self.timeout),
+        )
+
+    def _post(self, name: str, path: str, payload: Dict[str, Any], timeout: Optional[float] = None):
+        digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+        return self._with_cache(
+            name,
+            f"POST {path} {digest}",
+            lambda: _http_post_sync(
+                f"{state.api_base_url}{path}", payload, timeout or self.timeout
+            ),
+        )
+
+    def cache_note(self, name: str) -> str:
+        """ "No connection — saved data from 14:30" while name shows a saved reply, else ""."""
+        saved_at = self.cache_hits.get(name)
+        if saved_at is None:
+            return ""
+        t = time.localtime(saved_at)
+        same_day = time.strftime("%Y%m%d", t) == time.strftime("%Y%m%d")
+        when = time.strftime("%H:%M" if same_day else "%d.%m %H:%M", t)
+        return state.text("offline_note", when=when)
 
     @staticmethod
     def _serves_feature_routes(res: Dict[str, Any]) -> bool:
@@ -216,8 +311,7 @@ class APIClient:
             state.api_status_detail = "Backend reachable but incomplete: " + "; ".join(stub_hosts)
         else:
             state.api_status_detail = (
-                "No backend responded. Last error: "
-                f"{last_http_error or 'none recorded'}"
+                f"No backend responded. Last error: {last_http_error or 'none recorded'}"
             )
         logger.error("API health check failed: %s", state.api_status_detail)
         return {
@@ -245,7 +339,6 @@ class APIClient:
         strategy: str = "hybrid",
     ) -> Optional[Dict[str, Any]]:
         """ML prediction + dispatch via POST /predict (PredictionResponse)."""
-        url = f"{state.api_base_url}/predict"
         payload = {
             "irradiation": irradiation,
             "temperature": temperature,
@@ -263,7 +356,7 @@ class APIClient:
             "strategy": strategy,
         }
 
-        res = await asyncio.to_thread(_http_post_sync, url, payload, self.timeout)
+        res = await self._post("predict", "/predict", payload)
         # None when the backend cannot answer (reason in last_http_error). This
         # used to return a phone-side guess shaped like a real reply, with an
         # optimal_dispatch block /predict never sends — the screens showed it
@@ -287,9 +380,7 @@ class APIClient:
 
     async def get_weather(self) -> Optional[Dict[str, Any]]:
         """Current Turkistan conditions (GET /solarman/weather)."""
-        return await asyncio.to_thread(
-            _http_get_sync, f"{state.api_base_url}/solarman/weather", self.timeout
-        )
+        return await self._get("weather", "/solarman/weather")
 
     async def solarman_process(
         self,
@@ -386,8 +477,7 @@ class APIClient:
         answer, so the caller can say why instead of inventing numbers. The
         server needs WEATHERAPI_KEY configured or this route returns 500.
         """
-        url = f"{state.api_base_url}/solarman/forecast?dc_capacity_kwp={dc_capacity_kwp}"
-        res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
+        res = await self._get("forecast", f"/solarman/forecast?dc_capacity_kwp={dc_capacity_kwp}")
         if res and isinstance(res, dict):
             forecasts = res.get("forecasts")
             if isinstance(forecasts, list) and forecasts:
@@ -404,10 +494,10 @@ class APIClient:
         """
         # /solarman/live is a GET; POSTing to it returned 405 every time, which
         # is why the live telemetry screen never populated.
-        url = f"{state.api_base_url}/solarman/live?demo=true"
+        path = "/solarman/live?demo=true"
         if device_sn:
-            url += f"&device_sn={device_sn}"
-        res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
+            path += f"&device_sn={device_sn}"
+        res = await self._get("live", path)
         return res if isinstance(res, dict) else None
 
     @staticmethod
@@ -417,7 +507,7 @@ class APIClient:
 
     async def get_metrics(self) -> Optional[Dict[str, Any]]:
         """Model metrics and feature importances (GET /metrics)."""
-        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/metrics", self.timeout)
+        res = await self._get("metrics", "/metrics")
         return res if isinstance(res, dict) else None
 
     async def sustainability_impact(
@@ -433,21 +523,19 @@ class APIClient:
             "grid_factor_kg_per_kwh": grid_factor_kg_per_kwh,
             "lang": state.lang,
         }
-        res = await asyncio.to_thread(
-            _http_post_sync, f"{state.api_base_url}/sustainability/impact", payload, self.timeout
-        )
+        res = await self._post("impact", "/sustainability/impact", payload)
         return res if isinstance(res, dict) else None
 
     # ---- education labs (api/labs.py) ----------------------------------
     async def labs_list(self) -> Optional[List[Dict[str, Any]]]:
         """The 12 labs (GET /labs)."""
-        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/labs", self.timeout)
+        res = await self._get("labs", "/labs")
         labs = res.get("labs") if isinstance(res, dict) else None
         return labs if isinstance(labs, list) else None
 
     async def lab_detail(self, lab_id: str) -> Optional[Dict[str, Any]]:
         """Parameters, theory (kk/en) and 3D viewer path of one lab (GET /labs/{id})."""
-        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/labs/{lab_id}", self.timeout)
+        res = await self._get(f"lab:{lab_id}", f"/labs/{lab_id}")
         return res if isinstance(res, dict) else None
 
     async def lab_run(self, lab_id: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -459,9 +547,7 @@ class APIClient:
 
     async def lab_test(self, lab_id: str) -> Optional[Dict[str, Any]]:
         """The lab's final test without answers (GET /labs/{id}/test)."""
-        res = await asyncio.to_thread(
-            _http_get_sync, f"{state.api_base_url}/labs/{lab_id}/test?lang={state.lang}", self.timeout
-        )
+        res = await self._get(f"test:{lab_id}", f"/labs/{lab_id}/test?lang={state.lang}")
         return res if isinstance(res, dict) else None
 
     async def lab_grade(self, lab_id: str, answers: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -469,8 +555,60 @@ class APIClient:
         res = await asyncio.to_thread(
             _http_post_sync,
             f"{state.api_base_url}/labs/{lab_id}/test/grade",
-            {"answers": answers, "lang": state.lang},
+            {"answers": answers, "lang": state.lang, "student": _student()},
             60.0,
+        )
+        return res if isinstance(res, dict) else None
+
+    async def lab_task_check(
+        self,
+        lab_id: str,
+        task_id: str,
+        number: Optional[float] = None,
+        choice_index: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Check one practice task (POST /labs/{id}/tasks/{task}/check)."""
+        res = await asyncio.to_thread(
+            _http_post_sync,
+            f"{state.api_base_url}/labs/{lab_id}/tasks/{task_id}/check",
+            {"number": number, "choice_index": choice_index, "student": _student()},
+            self.timeout,
+        )
+        return res if isinstance(res, dict) else None
+
+    async def lab_report(self, lab_id: str, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """The student's report, built on the server (POST /labs/{id}/report)."""
+        res = await asyncio.to_thread(
+            _http_post_sync, f"{state.api_base_url}/labs/{lab_id}/report", payload, 60.0
+        )
+        return res if isinstance(res, dict) else None
+
+    # ---- Learn lessons and quizzes (api/learn.py) -----------------------
+    async def learn_lessons(self) -> Optional[List[Dict[str, Any]]]:
+        """The lesson cards (GET /learn/lessons)."""
+        res = await self._get("lessons", f"/learn/lessons?lang={state.lang}")
+        lessons = res.get("lessons") if isinstance(res, dict) else None
+        return lessons if isinstance(lessons, list) else None
+
+    async def learn_lesson(self, lesson_id: str) -> Optional[Dict[str, Any]]:
+        """One lesson as Markdown, its quiz id and related labs (GET /learn/lessons/{id})."""
+        res = await self._get(
+            f"lesson:{lesson_id}", f"/learn/lessons/{lesson_id}?lang={state.lang}"
+        )
+        return res if isinstance(res, dict) else None
+
+    async def learn_quiz(self, quiz_id: str) -> Optional[Dict[str, Any]]:
+        """A lesson's quiz without the answers (GET /learn/quizzes/{id})."""
+        res = await self._get(f"quiz:{quiz_id}", f"/learn/quizzes/{quiz_id}?lang={state.lang}")
+        return res if isinstance(res, dict) else None
+
+    async def learn_grade(self, quiz_id: str, answers: Dict[str, int]) -> Optional[Dict[str, Any]]:
+        """Grade a quiz on the server (POST /learn/quizzes/{id}/grade)."""
+        res = await asyncio.to_thread(
+            _http_post_sync,
+            f"{state.api_base_url}/learn/quizzes/{quiz_id}/grade",
+            {"answers": answers, "lang": state.lang, "student": _student()},
+            self.timeout,
         )
         return res if isinstance(res, dict) else None
 
@@ -478,7 +616,50 @@ class APIClient:
     def lab_viewer_url(viewer_path: str) -> str:
         """The 3D lab page on the API server; it calls back to the same server."""
         base = state.api_base_url
-        return f"{base}{viewer_path}?lang={state.lang}&api={urllib.parse.quote(base, safe='')}"
+        url = f"{base}{viewer_path}?lang={state.lang}&api={urllib.parse.quote(base, safe='')}"
+        student = _student()
+        if student:  # the viewer sends it with the test, so the class sees the result
+            url += "&" + urllib.parse.urlencode(
+                {"class": student["class_code"], "token": student["token"]}
+            )
+        return url
+
+    # ---- classes (api/classroom.py) ---------------------------------------
+    async def classroom_create(self, name: str) -> Optional[Dict[str, Any]]:
+        """A new class: its code for the students and the teacher key."""
+        return await asyncio.to_thread(
+            _http_json_sync, "POST", f"{state.api_base_url}/classes", {"name": name}
+        )
+
+    async def classroom_join(self, code: str, name: str) -> Optional[Dict[str, Any]]:
+        """Join a class with its code; returns the class name and this phone's token."""
+        code = urllib.parse.quote(code.strip().upper(), safe="")
+        return await asyncio.to_thread(
+            _http_json_sync, "POST", f"{state.api_base_url}/classes/{code}/join", {"name": name}
+        )
+
+    async def classroom_results(self, code: str, key: str) -> Optional[Dict[str, Any]]:
+        """The class table (teacher key required)."""
+        code = urllib.parse.quote(code.strip().upper(), safe="")
+        return await asyncio.to_thread(
+            _http_json_sync,
+            "GET",
+            f"{state.api_base_url}/classes/{code}/results",
+            None,
+            {"X-Teacher-Key": key},
+        )
+
+    async def classroom_remove(
+        self, code: str, key: str, student_id: int
+    ) -> Optional[Dict[str, Any]]:
+        code = urllib.parse.quote(code.strip().upper(), safe="")
+        return await asyncio.to_thread(
+            _http_json_sync,
+            "DELETE",
+            f"{state.api_base_url}/classes/{code}/students/{int(student_id)}",
+            None,
+            {"X-Teacher-Key": key},
+        )
 
 
 api_client = APIClient()

@@ -2,11 +2,14 @@
 Global Application State Manager for EcoPredict AI Mobile.
 """
 
-from typing import Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 try:
     from mobile.config import DEFAULT_API_BASE, COLORS, get_text
 except (ImportError, ModuleNotFoundError):
     from config import DEFAULT_API_BASE, COLORS, get_text  # type: ignore # pyright: ignore[reportMissingImports]
+
+
+PREF_CLASSROOM = "ecopredict.classroom"  # the class joined as a student (JSON)
 
 
 class AppState:
@@ -43,6 +46,17 @@ class AppState:
         self.active_tab: str = "overview"
         # Which panel the Forecast tab shows: "ml" (instant) or "24h".
         self.forecast_segment: str = "ml"
+        # A lab to open when the Labs screen shows next (a Learn lesson links
+        # to its labs); consumed by the labs view.
+        self.pending_lab: str = ""
+        # Solarman station alerts (mobile/solar_alerts.py), checked while the
+        # app is open; screens that show them register under a name.
+        # The class this phone joined as a student: {code, token, class_name,
+        # name}; graded answers carry it so the teacher sees the results.
+        self.classroom: Optional[Dict[str, str]] = None
+        self.alerts_enabled: bool = True
+        self.solar_alerts: List[Dict[str, Any]] = []
+        self.alert_listeners: Dict[str, Callable[[List[Dict[str, Any]]], None]] = {}
         # (role, text) with role "user" | "ai" | "error". Kept here, not in the
         # chat view, so the conversation survives the view being rebuilt when
         # the language or theme changes.
@@ -79,6 +93,14 @@ class AppState:
         if url and url.strip():
             self.api_base_url = url.strip().rstrip("/")
             self.notify()
+
+    def set_solar_alerts(self, alerts: List[Dict[str, Any]]) -> None:
+        self.solar_alerts = list(alerts)
+        for name, cb in list(self.alert_listeners.items()):
+            try:
+                cb(self.solar_alerts)
+            except Exception as e:  # a rebuilt screen's old control
+                print(f"Error in alert listener {name}: {e}")
 
     def subscribe(self, callback: Callable[[], None]):
         if callback not in self._listeners:

@@ -19,6 +19,7 @@ MORE_ITEMS = [
     ("labs", ft.Icons.SCIENCE, "nav_labs", "more_labs_sub"),
     ("training", ft.Icons.INSIGHTS, "nav_training", "more_training_sub"),
     ("learn", ft.Icons.SCHOOL, "nav_learn", "more_learn_sub"),
+    ("teacher", ft.Icons.GROUPS, "nav_teacher", "more_teacher_sub"),
     ("settings", ft.Icons.SETTINGS, "nav_settings", "more_settings_sub"),
 ]
 

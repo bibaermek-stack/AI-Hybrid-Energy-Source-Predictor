@@ -102,3 +102,39 @@ class TestProgressCountsLabs(unittest.TestCase):
         again = ProgressTracker(store)  # re-open the session: migration runs
         self.assertEqual(again.summary()["labs_completed"], 1)
         self.assertEqual(again.summary()["labs_list"], ["lab_grid_impact"])
+
+    def test_merge_progress_from_the_browser(self):
+        # The site keeps progress in localStorage; what comes back is merged in.
+        from src.education.progress import ProgressTracker
+
+        p = ProgressTracker()
+        p.mark_lab("lab_grid_impact")
+        p.record_quiz("lab_pv_physics_test", 80)
+        saved = {
+            "labs_done": ["lab_pv_physics", "not_a_lab", 7],
+            "lab_tasks": {"lab_pv_physics": ["eta_eff", None], "not_a_lab": ["x"]},
+            "quizzes": {"lab_pv_physics_test": 60, "lab_bess_soc_test": 250, "bad": "x"},
+            "exercises": {"sim:lab_bess_soc": True, "e": 1},
+        }
+        self.assertTrue(p.merge(saved))
+        sm = p.summary()
+        self.assertEqual(sorted(sm["labs_list"]), ["lab_grid_impact", "lab_pv_physics"])
+        self.assertEqual(sm["lab_tasks"], {"lab_pv_physics": ["eta_eff"]})
+        self.assertEqual(sm["quiz_scores"]["lab_pv_physics_test"], 80)  # the best one
+        self.assertEqual(sm["quiz_scores"]["lab_bess_soc_test"], 100)  # clamped
+        self.assertNotIn("bad", sm["quiz_scores"])
+        self.assertTrue(p.data["exercises"]["sim:lab_bess_soc"])
+        self.assertNotIn("e", p.data["exercises"])
+        self.assertFalse(p.merge(saved))  # nothing new the second time
+        for junk in (None, "text", [1, 2], {"labs_done": "lab_pv_physics"}):
+            self.assertFalse(p.merge(junk))
+
+    def test_browser_store_component_files(self):
+        from pathlib import Path
+
+        page = (
+            Path(__file__).resolve().parents[1]
+            / "dashboard/components/progress_store_frontend/index.html"
+        ).read_text(encoding="utf-8")
+        for needle in ("streamlit:componentReady", "streamlit:setComponentValue", "localStorage"):
+            self.assertIn(needle, page)
