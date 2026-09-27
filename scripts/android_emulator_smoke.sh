@@ -134,8 +134,10 @@ if launch; then
       sleep 25
       shot 08_after_capture
       echo "after capture: $(labels_of 08_after_capture)"
-      if grep -qE "Анықталды|Ақау табылмады" "$OUT/08_after_capture.xml"; then
-        pass "camera capture went through YOLO and got an answer"
+      # the diagnosis (confirmed / likely / uncertain / not a panel / retake;
+      # the emulator's fake camera is rarely a panel), or an older server's YOLO answer
+      if grep -qE "Расталды|Ықтимал|Нақты емес|күн панелі емес|Суретті қайта түсіріңіз|Анықталды|Ақау табылмады" "$OUT/08_after_capture.xml"; then
+        pass "camera capture reached the fault check and got an answer"
       elif grep -q "Диагноз орындалмады" "$OUT/08_after_capture.xml"; then
         echo "NOTE: capture uploaded but the server did not diagnose it (see labels above)"
       else
