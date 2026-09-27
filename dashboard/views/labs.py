@@ -1,8 +1,8 @@
 """
 Streamlit page for the 12 education labs.
 
-Every lab has four tabs: theory, the lab itself, practice tasks and the final
-test. The lab tab is generated from the shared engine
+Every lab has five tabs: theory, the lab itself, practice tasks, the final
+test and the student's report (a printable HTML file, src/education/labs/report.py). The lab tab is generated from the shared engine
 (src/education/labs/runner.py) — the same parameters, simulation and results
 the mobile app gets from the API — and lab 12 is the interactive 3D inverter
 model (dashboard/components/lab3d.py).
@@ -31,9 +31,11 @@ from dashboard.components.states import empty_state, error_state, loading_state
 from dashboard.components.status_badge import render_status_badge
 from dashboard.components.ui_kit import section_header
 from dashboard.utils.plotly_theme import apply_theme
-from src.education.inverter_lab import grade_wiring
+from src.education.inverter_lab import SCENARIOS, grade_wiring
+from src.education.lab_tasks import LAB_TASKS
 from src.education.labs.lab_registry import list_labs, t
 from src.education.labs.lab_tests import grade_test, public_test
+from src.education.labs.report import build_report_html, report_filename
 from src.education.labs.runner import list_params, run_lab
 from src.education.progress import ProgressTracker
 
@@ -121,6 +123,7 @@ def _render(lang: str) -> None:
             _t(lang, "3D lab", "3D зертхана") if is_3d else _t(lang, "Lab", "Зертхана"),
             _t(lang, "Practice tasks", "Жаттығу тапсырмалары"),
             _t(lang, "Test", "Тест"),
+            _t(lang, "Report", "Есеп"),
         ],
         key=f"lab_tabs_{lab_id}_{lang}",
     )
@@ -139,6 +142,8 @@ def _render(lang: str) -> None:
             _lab3d_test_note(lang)
         else:
             _test_panel(lab_id, lang, progress)
+    with tabs[4]:
+        _report_panel(lab_id, lang, progress, labs)
     sync_progress(store, progress)  # last: saves whatever this run changed
 
 
@@ -429,9 +434,8 @@ def _lab3d_panel(lang: str, progress: ProgressTracker) -> None:
         if tid.startswith("scenario_")
     ]
     if fixed:
-        st.caption(
-            _t(lang, "Scenarios fixed: ", "Түзетілген сценарийлер: ") + ", ".join(sorted(fixed))
-        )
+        titles = sorted(_loc(SCENARIOS.get(f, {}).get("title"), lang) or f for f in fixed)
+        st.caption(_t(lang, "Scenarios fixed: ", "Түзетілген сценарийлер: ") + "; ".join(titles))
     last = st.session_state.get("lab3d_last_check")
     if last and not last["ok"]:
         st.caption(
@@ -454,3 +458,121 @@ def _lab3d_test_note(lang: str) -> None:
     result = st.session_state.get("lab3d_test_result")
     if result:
         _test_summary(result, lang)
+
+
+# ------------------------------------------------------------------ report tab
+
+
+def _report_panel(
+    lab_id: str, lang: str, progress: ProgressTracker, labs: list[dict[str, Any]]
+) -> None:
+    st.caption(
+        _t(
+            lang,
+            "The report holds the parameters and results of your last run, the charts, the "
+            "practice tasks solved and the test score, with room for your conclusion. Open the "
+            "file and print it or save it as PDF (Ctrl+P).",
+            "Есепте соңғы іске қосудың параметрлері мен нәтижелері, графиктер, орындалған "
+            "тапсырмалар мен тест нәтижесі бар, қорытындыға орын қалдырылған. Файлды ашып, "
+            "басып шығарыңыз немесе PDF етіп сақтаңыз (Ctrl+P).",
+        )
+    )
+    c1, c2 = st.columns(2)
+    student = c1.text_input(
+        _t(lang, "Student's full name", "Студенттің аты-жөні"), key="report_student"
+    )
+    group = c2.text_input(_t(lang, "Group", "Тобы"), key="report_group")
+
+    run_result = st.session_state.get(f"lab_result_{lab_id}")
+    test_result = st.session_state.get(
+        "lab3d_test_result" if lab_id == LAB_3D else f"lab_test_result_{lab_id}"
+    )
+    best = progress.data.get("quizzes", {}).get(f"{lab_id}_test")
+    missing = []
+    if run_result is None and lab_id != LAB_3D:
+        missing.append(_t(lang, "run the lab", "зертхананы іске қосыңыз"))
+    if best is None and test_result is None:
+        missing.append(_t(lang, "take the test", "тестті тапсырыңыз"))
+    if missing:
+        st.info(
+            _t(lang, "For a complete report: ", "Есеп толық болуы үшін: ")
+            + ", ".join(missing)
+            + "."
+        )
+    page = build_report_html(
+        lab_id,
+        lang,
+        student=student,
+        group=group,
+        run_result=run_result,
+        test_result=test_result,
+        best_test_percent=best,
+        tasks_done=progress.tasks_done_for(lab_id),
+        last_3d_check=st.session_state.get("lab3d_last_check") if lab_id == LAB_3D else None,
+    )
+    st.download_button(
+        _t(lang, "Download the report (HTML)", "Есепті жүктеу (HTML)"),
+        data=page.encode("utf-8"),
+        file_name=report_filename(lab_id, student),
+        mime="text/html",
+        type="primary",
+        icon=":material/download:",
+        on_click="ignore",  # no rerun: the 3D viewer stays as it is
+        key=f"report_dl_{lab_id}",
+    )
+
+    st.markdown("#### " + _t(lang, "My progress in the 12 labs", "12 зертхана бойынша прогресім"))
+    quizzes = progress.data.get("quizzes", {})
+    rows = []
+    for i, lab in enumerate(labs, start=1):
+        total = len(LAB_TASKS.get(lab["id"], []))
+        done = sum(
+            1 for tid in progress.tasks_done_for(lab["id"]) if not tid.startswith("scenario_")
+        )
+        score = quizzes.get(f"{lab['id']}_test")
+        rows.append(
+            {
+                "№": i,
+                _t(lang, "Lab", "Зертхана"): t(lab["title"], lang),
+                _t(lang, "Tasks", "Тапсырмалар"): f"{min(done, total)}/{total}",
+                _t(lang, "Best test score", "Тесттің ең жоғары нәтижесі"): (
+                    f"{score:.0f} %" if score is not None else "—"
+                ),
+                _t(lang, "Completed", "Аяқталды"): "✅" if progress.lab_done(lab["id"]) else "",
+            }
+        )
+    st.dataframe(rows, hide_index=True, width="stretch")
+    st.caption(
+        _t(
+            lang,
+            "Progress is kept in this browser. On a shared computer, reset it when you finish.",
+            "Прогресс осы браузерде сақталады. Ортақ компьютерде жұмысты аяқтаған соң тазалаңыз.",
+        )
+    )
+    with st.popover(
+        _t(lang, "Reset my progress", "Прогресті тазалау"), icon=":material/restart_alt:"
+    ):
+        st.write(
+            _t(
+                lang,
+                "Passed labs, solved tasks and test scores will be erased in this browser.",
+                "Өтілген зертханалар, орындалған тапсырмалар мен тест нәтижелері осы браузерден өшіріледі.",
+            )
+        )
+        st.button(
+            _t(lang, "Yes, reset", "Иә, тазалау"),
+            type="primary",
+            on_click=_reset_progress,
+            key="reset_progress",
+        )
+
+
+def _reset_progress() -> None:
+    """Button callback: empty the progress (the browser copy follows on this run)."""
+    ProgressTracker.from_session(st.session_state).reset()
+    for key in list(st.session_state):
+        if isinstance(key, str) and (
+            key.startswith(("lab_result_", "lab_test_result_"))
+            or key in ("lab3d_test_result", "lab3d_last_check")
+        ):
+            del st.session_state[key]
