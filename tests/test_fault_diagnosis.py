@@ -173,6 +173,12 @@ class TestHeadFile(unittest.TestCase):
         self.assertTrue(path.exists(), path)
         self.assertEqual(dg.sha256_file(path), self.spec["backbone"]["sha256"])
 
+    def test_backbone_fingerprint_is_recorded(self):
+        fp = self.spec["backbone"]["fingerprint"]
+        self.assertEqual(len(fp), 32)
+        self.assertTrue(dg.fingerprint_matches(np.asarray(fp), fp))
+        self.assertFalse(dg.fingerprint_matches(np.asarray(fp) + 0.5, fp))
+
     def test_metrics_are_recorded(self):
         m = self.spec["metrics"]
         for status in ("confirmed", "likely", "uncertain"):

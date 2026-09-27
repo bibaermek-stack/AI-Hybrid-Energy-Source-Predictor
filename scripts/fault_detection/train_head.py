@@ -258,6 +258,8 @@ def main() -> None:
             "sha256": dg.sha256_file(backbone_path),
             "imgsz": IMGSZ,
             "dim": int(dim),
+            # first values of the reference picture's embedding, checked at load
+            "fingerprint": [float(f"{v:.7g}") for v in embed([dg.reference_image()])[0][:32]],
             "source": "Ultralytics YOLO26s-cls (ImageNet), github.com/ultralytics/assets releases",
         },
         "classifier": head_spec(clf, CLS),

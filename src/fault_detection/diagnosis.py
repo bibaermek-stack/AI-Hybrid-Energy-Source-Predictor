@@ -238,6 +238,17 @@ def embed_with(model: Any, images: Sequence[np.ndarray], imgsz: int) -> np.ndarr
     return np.stack([f.detach().cpu().numpy().ravel() for f in feats]).astype(np.float64)
 
 
+def reference_image() -> np.ndarray:
+    """A fixed synthetic picture; its embedding pins the backbone and its preprocessing."""
+    y, x = np.mgrid[0:256, 0:320]
+    return np.stack([x * 255 // 319, y, (x + y) % 64 * 4], axis=-1).astype(np.uint8)
+
+
+def fingerprint_matches(emb: np.ndarray, ref: Sequence[float]) -> bool:
+    ref = np.asarray(ref, dtype=np.float64)
+    return float(np.abs(emb[: len(ref)] - ref).max()) <= 1e-2 * (1.0 + float(np.abs(ref).max()))
+
+
 def decode_image(payload: bytes) -> np.ndarray:
     """Bytes to a BGR array (EXIF rotation applied); ValueError if not an image."""
     import cv2
@@ -258,6 +269,7 @@ class FaultDiagnoser:
         self.backbone_path = self.head_path.parent / bb["file"]
         self.backbone_sha256 = bb["sha256"]
         self.imgsz = int(bb["imgsz"])
+        self.fingerprint = bb.get("fingerprint")
         self.classifier = LinearHead(spec["classifier"])
         self.panel = LinearHead(spec["panel"])
         if self.classifier.classes and tuple(self.classifier.classes) != CLASSES:
@@ -281,7 +293,17 @@ class FaultDiagnoser:
                     f"{self.backbone_path.name} is not the file the heads were fitted on "
                     f"(sha256 {digest[:12]} != {self.backbone_sha256[:12]}); rerun train_head.py"
                 )
-            self._model = YOLO(str(self.backbone_path))
+            model = YOLO(str(self.backbone_path))
+            # Same weights, but a different ultralytics could resize or normalise
+            # differently; the heads would then read other numbers, silently.
+            if self.fingerprint is not None:
+                emb = embed_with(model, [reference_image()], self.imgsz)[0]
+                if not fingerprint_matches(emb, self.fingerprint):
+                    raise RuntimeError(
+                        "The backbone's embedding changed (ultralytics version?); "
+                        "rerun scripts/fault_detection/train_head.py"
+                    )
+            self._model = model
         return self._model
 
     def embed(self, images: Sequence[np.ndarray]) -> np.ndarray:
