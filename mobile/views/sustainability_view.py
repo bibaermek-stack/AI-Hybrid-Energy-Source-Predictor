@@ -74,7 +74,7 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
             grid = _read(tf_grid)
             factor = _read(tf_factor)
         except ValueError as err:
-            txt_status.value, txt_status.visible = str(err), True
+            txt_status.value, txt_status.visible, txt_status.color = str(err), True, c["error"]
             page.update()
             return
 
@@ -87,11 +87,14 @@ def build_sustainability_view(page: ft.Page) -> ft.Control:
         if res is None:
             reason = getattr(api_client_module, "last_http_error", "") or t("reason_unknown")
             txt_status.value, txt_status.visible = t("su_err_failed", reason=reason), True
+            txt_status.color = c["error"]
             for v in (val_co2, val_trees, val_cars, val_emitted):
                 v.value = "—"
             page.update()
             return
 
+        note = api_client.cache_note("impact")
+        txt_status.value, txt_status.visible, txt_status.color = note, bool(note), c["warning"]
         carbon = res.get("carbon") or {}
         energy = res.get("energy") or {}
         net_t = float(carbon.get("co2_net_benefit_kg") or 0.0) / 1000.0

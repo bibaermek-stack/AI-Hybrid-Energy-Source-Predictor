@@ -3,18 +3,22 @@ Async REST API Client for EcoPredict AI Backend using Python standard library.
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import ssl
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional
 
 try:
+    from mobile import offline_cache
     from mobile.config import DEFAULT_API_BASE
     from mobile.state import state
 except (ImportError, ModuleNotFoundError):
+    import offline_cache  # type: ignore # pyright: ignore[reportMissingImports]
     from config import DEFAULT_API_BASE  # type: ignore # pyright: ignore[reportMissingImports]
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
 
@@ -61,8 +65,7 @@ def _http_get_sync(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
     global last_http_error
     try:
         req = urllib.request.Request(
-            url,
-            headers={"User-Agent": "EcoPredict-Mobile/1.0", "Accept": "application/json"}
+            url, headers={"User-Agent": "EcoPredict-Mobile/1.0", "Accept": "application/json"}
         )
         with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
             if resp.status == 200:
@@ -78,7 +81,9 @@ def _http_get_sync(url: str, timeout: float = 10.0) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _http_post_sync(url: str, payload: Dict[str, Any], timeout: float = 10.0) -> Optional[Dict[str, Any]]:
+def _http_post_sync(
+    url: str, payload: Dict[str, Any], timeout: float = 10.0
+) -> Optional[Dict[str, Any]]:
     """Synchronous HTTP POST using urllib.request."""
     global last_http_error
     try:
@@ -163,6 +168,54 @@ class APIClient:
 
     def __init__(self, timeout: float = 25.0):
         self.timeout = timeout
+        # screen data name -> when the reply now shown was saved, while a screen
+        # shows a saved reply because the server could not be reached
+        self.cache_hits: Dict[str, float] = {}
+
+    async def _with_cache(self, name: str, key: str, fetch) -> Any:
+        """
+        Run fetch (a blocking HTTP call) off the event loop. A good reply is
+        saved on the phone under key; when there is none (offline, server
+        down) the saved one is returned and cache_hits[name] says from when.
+        """
+        res = await asyncio.to_thread(fetch)
+        if res is not None:
+            offline_cache.put(key, res)
+            self.cache_hits.pop(name, None)
+            return res
+        saved = offline_cache.get(key)
+        if saved is None:
+            self.cache_hits.pop(name, None)
+            return None
+        self.cache_hits[name] = saved[1]
+        return saved[0]
+
+    def _get(self, name: str, path: str, timeout: Optional[float] = None):
+        return self._with_cache(
+            name,
+            f"GET {path}",
+            lambda: _http_get_sync(f"{state.api_base_url}{path}", timeout or self.timeout),
+        )
+
+    def _post(self, name: str, path: str, payload: Dict[str, Any], timeout: Optional[float] = None):
+        digest = hashlib.sha1(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+        return self._with_cache(
+            name,
+            f"POST {path} {digest}",
+            lambda: _http_post_sync(
+                f"{state.api_base_url}{path}", payload, timeout or self.timeout
+            ),
+        )
+
+    def cache_note(self, name: str) -> str:
+        """ "No connection — saved data from 14:30" while name shows a saved reply, else ""."""
+        saved_at = self.cache_hits.get(name)
+        if saved_at is None:
+            return ""
+        t = time.localtime(saved_at)
+        same_day = time.strftime("%Y%m%d", t) == time.strftime("%Y%m%d")
+        when = time.strftime("%H:%M" if same_day else "%d.%m %H:%M", t)
+        return state.text("offline_note", when=when)
 
     @staticmethod
     def _serves_feature_routes(res: Dict[str, Any]) -> bool:
@@ -216,8 +269,7 @@ class APIClient:
             state.api_status_detail = "Backend reachable but incomplete: " + "; ".join(stub_hosts)
         else:
             state.api_status_detail = (
-                "No backend responded. Last error: "
-                f"{last_http_error or 'none recorded'}"
+                f"No backend responded. Last error: {last_http_error or 'none recorded'}"
             )
         logger.error("API health check failed: %s", state.api_status_detail)
         return {
@@ -245,7 +297,6 @@ class APIClient:
         strategy: str = "hybrid",
     ) -> Optional[Dict[str, Any]]:
         """ML prediction + dispatch via POST /predict (PredictionResponse)."""
-        url = f"{state.api_base_url}/predict"
         payload = {
             "irradiation": irradiation,
             "temperature": temperature,
@@ -263,7 +314,7 @@ class APIClient:
             "strategy": strategy,
         }
 
-        res = await asyncio.to_thread(_http_post_sync, url, payload, self.timeout)
+        res = await self._post("predict", "/predict", payload)
         # None when the backend cannot answer (reason in last_http_error). This
         # used to return a phone-side guess shaped like a real reply, with an
         # optimal_dispatch block /predict never sends — the screens showed it
@@ -287,9 +338,7 @@ class APIClient:
 
     async def get_weather(self) -> Optional[Dict[str, Any]]:
         """Current Turkistan conditions (GET /solarman/weather)."""
-        return await asyncio.to_thread(
-            _http_get_sync, f"{state.api_base_url}/solarman/weather", self.timeout
-        )
+        return await self._get("weather", "/solarman/weather")
 
     async def solarman_process(
         self,
@@ -386,8 +435,7 @@ class APIClient:
         answer, so the caller can say why instead of inventing numbers. The
         server needs WEATHERAPI_KEY configured or this route returns 500.
         """
-        url = f"{state.api_base_url}/solarman/forecast?dc_capacity_kwp={dc_capacity_kwp}"
-        res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
+        res = await self._get("forecast", f"/solarman/forecast?dc_capacity_kwp={dc_capacity_kwp}")
         if res and isinstance(res, dict):
             forecasts = res.get("forecasts")
             if isinstance(forecasts, list) and forecasts:
@@ -404,10 +452,10 @@ class APIClient:
         """
         # /solarman/live is a GET; POSTing to it returned 405 every time, which
         # is why the live telemetry screen never populated.
-        url = f"{state.api_base_url}/solarman/live?demo=true"
+        path = "/solarman/live?demo=true"
         if device_sn:
-            url += f"&device_sn={device_sn}"
-        res = await asyncio.to_thread(_http_get_sync, url, self.timeout)
+            path += f"&device_sn={device_sn}"
+        res = await self._get("live", path)
         return res if isinstance(res, dict) else None
 
     @staticmethod
@@ -417,7 +465,7 @@ class APIClient:
 
     async def get_metrics(self) -> Optional[Dict[str, Any]]:
         """Model metrics and feature importances (GET /metrics)."""
-        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/metrics", self.timeout)
+        res = await self._get("metrics", "/metrics")
         return res if isinstance(res, dict) else None
 
     async def sustainability_impact(
@@ -433,21 +481,19 @@ class APIClient:
             "grid_factor_kg_per_kwh": grid_factor_kg_per_kwh,
             "lang": state.lang,
         }
-        res = await asyncio.to_thread(
-            _http_post_sync, f"{state.api_base_url}/sustainability/impact", payload, self.timeout
-        )
+        res = await self._post("impact", "/sustainability/impact", payload)
         return res if isinstance(res, dict) else None
 
     # ---- education labs (api/labs.py) ----------------------------------
     async def labs_list(self) -> Optional[List[Dict[str, Any]]]:
         """The 12 labs (GET /labs)."""
-        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/labs", self.timeout)
+        res = await self._get("labs", "/labs")
         labs = res.get("labs") if isinstance(res, dict) else None
         return labs if isinstance(labs, list) else None
 
     async def lab_detail(self, lab_id: str) -> Optional[Dict[str, Any]]:
         """Parameters, theory (kk/en) and 3D viewer path of one lab (GET /labs/{id})."""
-        res = await asyncio.to_thread(_http_get_sync, f"{state.api_base_url}/labs/{lab_id}", self.timeout)
+        res = await self._get(f"lab:{lab_id}", f"/labs/{lab_id}")
         return res if isinstance(res, dict) else None
 
     async def lab_run(self, lab_id: str, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -459,9 +505,7 @@ class APIClient:
 
     async def lab_test(self, lab_id: str) -> Optional[Dict[str, Any]]:
         """The lab's final test without answers (GET /labs/{id}/test)."""
-        res = await asyncio.to_thread(
-            _http_get_sync, f"{state.api_base_url}/labs/{lab_id}/test?lang={state.lang}", self.timeout
-        )
+        res = await self._get(f"test:{lab_id}", f"/labs/{lab_id}/test?lang={state.lang}")
         return res if isinstance(res, dict) else None
 
     async def lab_grade(self, lab_id: str, answers: Dict[str, Any]) -> Optional[Dict[str, Any]]:

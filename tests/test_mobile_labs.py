@@ -103,6 +103,10 @@ class _Api:
         return self.c.post(f"/labs/{lab_id}/report", json=payload).json()
 
     @staticmethod
+    def cache_note(name):
+        return ""
+
+    @staticmethod
     def lab_viewer_url(path):
         from mobile.api_client import APIClient
 

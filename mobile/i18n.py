@@ -299,6 +299,7 @@ STRINGS = {
     "task_enter_number": ("Сан енгізіңіз (мысалы 0.184).", "Enter a number (e.g. 0.184)."),
     "task_pick": ("Нұсқаны таңдаңыз.", "Pick an option."),
     "task_err": ("⚠️ Тексерілмеді. {reason}", "⚠️ Not checked. {reason}"),
+    "offline_note": ("📴 Желі жоқ — {when} кезіндегі сақталған деректер", "📴 No connection — saved data from {when}"),
     "report_btn": ("Зертхана есебі", "Lab report"),
     "report_title": ("Зертхана есебі", "Lab report"),
     "report_intro": ("Есепті сервер жасайды: соңғы іске қосу, графиктер, тапсырмалар, тест нәтижесі және қорытындыға орын. Оқытушыға жіберіңіз немесе браузерде ашып PDF етіп сақтаңыз.", "The server builds the report: your last run, charts, tasks, test score and room for the conclusion. Send it to your teacher, or open it in the browser and save it as PDF."),

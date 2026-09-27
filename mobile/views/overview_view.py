@@ -266,10 +266,9 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
             state.load_kw,
             state.battery_kw,
         )
-        _set(
-            ref_scenario,
-            t("ov_scenario_detail", irr=state.irradiation, wind=state.wind_speed, load=state.load_kw),
-        )
+        scenario = t("ov_scenario_detail", irr=state.irradiation, wind=state.wind_speed, load=state.load_kw)
+        note = api_client.cache_note("predict")
+        _set(ref_scenario, f"{note}\n{scenario}" if note else scenario)
         if pred:
             _set(ref_solar, f"{float(pred.get('solar_power', 0.0)):.1f}")
             _set(ref_wind, f"{float(pred.get('wind_power', 0.0)):.1f}")
@@ -291,7 +290,9 @@ def build_overview_view(page: ft.Page, on_navigate_key: Callable[[str], None]) -
         ac = (gen.get("ac") or [{}])[0]
         if gen:
             demo = api_client.is_demo(live)
-            _set(ref_live_title, t("ov_live_title_demo") if demo else t("ov_live_title_live"))
+            title = t("ov_live_title_demo") if demo else t("ov_live_title_live")
+            note = api_client.cache_note("live")
+            _set(ref_live_title, f"{title} · {note}" if note else title)
             if ref_live_title.current is not None:
                 ref_live_title.current.color = c["warning"] if demo else c["text_primary"]
             _set(ref_pv_v, f"{dc.get('voltage_v', 0)} V")

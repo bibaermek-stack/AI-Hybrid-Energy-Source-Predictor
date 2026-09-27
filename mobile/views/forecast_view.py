@@ -146,9 +146,10 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
         _set(ref_peak_at, t("fc_peak_at", hour=int(peak_row.get("hour", 0))))
         _set(ref_total, f"{total_kwh:.0f} kWh")
         _set(ref_total_sub, t("fc_hours_count", n=len(rows)))
-        _set(ref_status, "")
+        note = api_client.cache_note("forecast")
+        _set(ref_status, note)
         if ref_status.current is not None:
-            ref_status.current.visible = False
+            ref_status.current.visible = bool(note)
 
         scale = max(peak, 0.1)
         bars = []

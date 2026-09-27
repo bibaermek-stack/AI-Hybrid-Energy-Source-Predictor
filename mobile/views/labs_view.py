@@ -261,7 +261,7 @@ def build_labs_view(
             )
         else:
             data["labs"] = labs
-            status.value = ""
+            status.value, status.color = api_client.cache_note("labs"), c["warning"]
             render_list()
         page.update()
 
@@ -340,6 +340,12 @@ def build_labs_view(
                         spacing=4,
                     ),
                     ft.Text(_loc(detail.get("objectives")), size=11, color=c["text_secondary"]),
+                    ft.Text(
+                        api_client.cache_note(f"lab:{lab_id}"),
+                        size=11,
+                        color=c["warning"],
+                        visible=bool(api_client.cache_note(f"lab:{lab_id}")),
+                    ),
                 ],
                 spacing=2,
             ),
@@ -690,6 +696,9 @@ def build_labs_view(
             else:
                 state_["test"] = test
                 build_questions(test)
+                note = api_client.cache_note(f"test:{lab_id}")
+                if note:  # questions readable offline; grading needs the server
+                    panel.controls.insert(0, ft.Text(note, size=11, color=c["warning"]))
             page.update()
 
         async def submit(e=None) -> None:

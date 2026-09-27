@@ -130,7 +130,8 @@ def build_training_view(page: ft.Page) -> ft.Control:
             page.update()
             return
 
-        txt_status.visible = False
+        note = api_client.cache_note("metrics")
+        txt_status.value, txt_status.color, txt_status.visible = note, c["warning"], bool(note)
         solar = data.get("solar_forecast") or {}
         for key, val, sub in (
             ("random_forest", val_rf, sub_rf),

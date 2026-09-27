@@ -224,6 +224,9 @@ def build_live_view(page: ft.Page) -> ft.Control:
             txt_status.value = t("live_normal") if online else t("live_no_link")
             txt_status.color = c["success"] if online else c["error"]
         txt_source.value = t("live_source", source=data.get("source", "—"), at=str(data.get("fetched_at", ""))[:19])
+        note = api_client.cache_note("live")
+        if note:
+            txt_source.value = f"{note}\n{txt_source.value}"
 
         ac_kw = _num(gen.get("ac_active_power_kw"))
         dc_kw = _num(gen.get("dc_total_kw"))
