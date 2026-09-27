@@ -47,8 +47,27 @@ adb install -r "$APK" || { echo "FAIL: install"; exit 1; }
 adb shell pm grant "$PKG" android.permission.CAMERA || true
 adb logcat -c
 
+# What was on screen and what the app logged, when a launch never got to Home.
+launch_evidence() {
+  shot "$1"
+  echo "screen: $(labels_of "$1")"
+  echo "focus: $(adb shell dumpsys window | grep -E 'mCurrentFocus=|mFocusedApp=' | tr -s ' ' | tr '\n' ' ')"
+  local pid
+  pid="$(adb shell pidof "$PKG" | tr -d '\r')"
+  echo "---- app log (pid ${pid:-none}, last lines) ----"
+  if [ -n "$pid" ]; then adb logcat -d --pid="$pid" | tail -n 60; fi
+  adb logcat -d | grep -E "ANR in|FATAL EXCEPTION|isn't responding" | tail -n 10
+}
+
 # 1. launch
-if launch; then pass "app launched and shows the bottom bar"; else fail "app did not reach the home screen"; fi
+if launch; then
+  pass "app launched and shows the bottom bar"
+else
+  fail "app did not reach the home screen"
+  launch_evidence 00_launch_failed
+  adb logcat -d > "$OUT/logcat.txt"
+  exit "$failures"  # every later step starts from Home
+fi
 sleep 5
 shot 01_home
 in_front && pass "app is in front after launch" || fail "app not in front after launch"
@@ -122,11 +141,12 @@ if launch; then
   fi
 else
   echo "NOTE: relaunch for the camera step failed"
+  launch_evidence 07_relaunch_failed
 fi
 
 # 6. labs
 labs_step() {
-  launch || { echo "NOTE: relaunch for the labs step failed"; return; }
+  launch || { echo "NOTE: relaunch for the labs step failed"; launch_evidence 09_relaunch_failed; return; }
   tap_tab "Тағы" 4
   sleep 3
   $UI tap "Зертханалар" --prefix || { fail "Labs tile not found under More"; return; }
