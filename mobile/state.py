@@ -43,6 +43,9 @@ class AppState:
         self.active_tab: str = "overview"
         # Which panel the Forecast tab shows: "ml" (instant) or "24h".
         self.forecast_segment: str = "ml"
+        # A lab to open when the Labs screen shows next (a Learn lesson links
+        # to its labs); consumed by the labs view.
+        self.pending_lab: str = ""
         # (role, text) with role "user" | "ai" | "error". Kept here, not in the
         # chat view, so the conversation survives the view being rebuilt when
         # the language or theme changes.

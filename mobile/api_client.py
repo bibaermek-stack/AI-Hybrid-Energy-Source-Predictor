@@ -541,6 +541,35 @@ class APIClient:
         )
         return res if isinstance(res, dict) else None
 
+    # ---- Learn lessons and quizzes (api/learn.py) -----------------------
+    async def learn_lessons(self) -> Optional[List[Dict[str, Any]]]:
+        """The lesson cards (GET /learn/lessons)."""
+        res = await self._get("lessons", f"/learn/lessons?lang={state.lang}")
+        lessons = res.get("lessons") if isinstance(res, dict) else None
+        return lessons if isinstance(lessons, list) else None
+
+    async def learn_lesson(self, lesson_id: str) -> Optional[Dict[str, Any]]:
+        """One lesson as Markdown, its quiz id and related labs (GET /learn/lessons/{id})."""
+        res = await self._get(
+            f"lesson:{lesson_id}", f"/learn/lessons/{lesson_id}?lang={state.lang}"
+        )
+        return res if isinstance(res, dict) else None
+
+    async def learn_quiz(self, quiz_id: str) -> Optional[Dict[str, Any]]:
+        """A lesson's quiz without the answers (GET /learn/quizzes/{id})."""
+        res = await self._get(f"quiz:{quiz_id}", f"/learn/quizzes/{quiz_id}?lang={state.lang}")
+        return res if isinstance(res, dict) else None
+
+    async def learn_grade(self, quiz_id: str, answers: Dict[str, int]) -> Optional[Dict[str, Any]]:
+        """Grade a quiz on the server (POST /learn/quizzes/{id}/grade)."""
+        res = await asyncio.to_thread(
+            _http_post_sync,
+            f"{state.api_base_url}/learn/quizzes/{quiz_id}/grade",
+            {"answers": answers, "lang": state.lang},
+            self.timeout,
+        )
+        return res if isinstance(res, dict) else None
+
     @staticmethod
     def lab_viewer_url(viewer_path: str) -> str:
         """The 3D lab page on the API server; it calls back to the same server."""

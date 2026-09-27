@@ -1087,6 +1087,11 @@ def build_labs_view(
     async def ensure_loaded() -> None:
         if data["labs"] is None and data["open"] is None:
             await load_list()
+        wanted, state.pending_lab = state.pending_lab, ""
+        if wanted and data["open"] != wanted:  # a Learn lesson asked for this lab
+            lab = next((lab for lab in data["labs"] or [] if lab["id"] == wanted), None)
+            if lab is not None:
+                await open_lab(lab)
 
     render_list()
     root.controls = [list_column]

@@ -230,7 +230,7 @@ async def main(page: ft.Page):
         "sustainability": lambda: build_sustainability_view(page),
         "labs": lambda: build_labs_view(page, set_inner_back("labs"), prefs),
         "training": lambda: build_training_view(page),
-        "learn": lambda: build_learn_view(page),
+        "learn": lambda: build_learn_view(page, navigate, set_inner_back("learn"), prefs),
         "settings": lambda: build_settings_view(page, refresh_chrome),
     }
 
@@ -300,6 +300,8 @@ async def main(page: ft.Page):
         state.active_tab = key
         if key == "forecast" and segment:
             state.forecast_segment = segment
+        if key == "labs" and segment:  # "labs:<lab id>": open that lab
+            state.pending_lab = segment
         view = get_view(key)
         if key == "forecast" and segment and "fn" in hub_select:
             hub_select["fn"](segment)

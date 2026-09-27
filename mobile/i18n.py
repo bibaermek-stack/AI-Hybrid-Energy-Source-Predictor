@@ -193,6 +193,19 @@ STRINGS = {
 
     # ---- learn ------------------------------------------------------------------
     "learn_title": ("📚 ЖЭК және микрожелі оқыту модулі", "📚 Renewables & microgrid basics"),
+    "learn_sub": ("6 сабақ: теория, формулалар, тапсырмалар, әр сабақтан кейін тест. Сабақтан зертханаға бірден өтуге болады.", "6 lessons: theory, formulas, tasks and a quiz after each. Each lesson leads to its labs."),
+    "learn_basics": ("Негіздер", "Basics"),
+    "learn_loading": ("Сабақтар жүктелуде…", "Loading the lessons…"),
+    "learn_err": ("⚠️ Сабақтар жүктелмеді. {reason}", "⚠️ Could not load the lessons. {reason}"),
+    "learn_back": ("Сабақтар тізіміне", "Back to the lessons"),
+    "learn_takeaways": ("Негізгі ойлар", "Key takeaways"),
+    "learn_related": ("Практикада көріңіз", "Try it in practice"),
+    "learn_quiz_btn": ("Сабақ тесті", "Lesson quiz"),
+    "learn_quiz_submit": ("Жауаптарды тексеру", "Check the answers"),
+    "learn_pick_all": ("Барлық сұраққа жауап беріңіз.", "Answer every question."),
+    "learn_best": ("Ең жоғары: {p}%", "Best: {p}%"),
+    "learn_passed": ("Өтті ✅", "Passed ✅"),
+    "learn_failed": ("Өту шегі {p}% — сабақты қайта оқып, қайталаңыз", "Pass mark {p}% — reread the lesson and try again"),
     "learn_pv_title": ("☀️ Күн фотовольтаикасы", "☀️ Solar photovoltaics"),
     "learn_pv_body": (
         "Күн радиациясын P-N өткелі арқылы тікелей тұрақты токқа (DC) айналдыру физикалық негіздері. "

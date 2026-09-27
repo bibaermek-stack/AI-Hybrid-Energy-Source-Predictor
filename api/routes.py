@@ -812,3 +812,8 @@ router.include_router(insights_router)
 from api.labs import router as labs_router  # noqa: E402
 
 router.include_router(labs_router)
+
+# The Learn lessons and quizzes for the mobile app (GET /learn/lessons, ...).
+from api.learn import router as learn_router  # noqa: E402
+
+router.include_router(learn_router)
