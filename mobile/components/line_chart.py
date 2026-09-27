@@ -79,8 +79,15 @@ def _shapes(chart: Dict[str, Any], width: float, height: float) -> List[cv.Shape
         shapes.append(cv.Line(PAD_L, py(yv), PAD_L + w, py(yv), paint=grid))
         shapes.append(cv.Text(2, py(yv) - 6, _tick(yv, y_step), style=label))
     x_step = (x_max - x_min) / 2
-    for xv in (x_min, x_min + x_step, x_max):
-        shapes.append(cv.Text(px(xv) - 8, PAD_T + h + 3, _tick(xv, x_step), style=label))
+    # Anchor the end ticks inside the plot so the last one is not clipped.
+    for xv, anchor in (
+        (x_min, ft.Alignment.TOP_LEFT),
+        (x_min + x_step, ft.Alignment.TOP_CENTER),
+        (x_max, ft.Alignment.TOP_RIGHT),
+    ):
+        shapes.append(
+            cv.Text(px(xv), PAD_T + h + 3, _tick(xv, x_step), style=label, alignment=anchor)
+        )
     for lim in limits:
         yv = float(lim["value"])
         shapes.append(

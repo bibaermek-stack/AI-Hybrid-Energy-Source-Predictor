@@ -14,6 +14,7 @@ every test existed only on the website.
 
 import asyncio
 import json
+import math
 from typing import Any, Callable, Dict, List, Optional
 
 import flet as ft
@@ -356,8 +357,11 @@ def build_labs_view(
                     divisions=max(1, round((hi - lo) / step)),
                 )
 
-                def fmt(v: float, is_int=is_int) -> str:
-                    return f"{int(round(v))}" if is_int else f"{v:.2f}".rstrip("0").rstrip(".")
+                # As many decimals as the slider step has (γ moves in 0.001s).
+                decimals = 0 if is_int else max(0, -math.floor(math.log10(step)))
+
+                def fmt(v: float, is_int=is_int, decimals=decimals) -> str:
+                    return f"{int(round(v))}" if is_int else f"{v:.{decimals}f}"
 
                 def on_change(e, key=key, shown=shown, fmt=fmt, is_int=is_int):
                     v = float(e.control.value)
@@ -375,7 +379,9 @@ def build_labs_view(
 
         msg = ft.Text("", size=12, color=c["text_secondary"], selectable=True)
         ring = ft.ProgressRing(visible=False, width=18, height=18, stroke_width=2)
-        results = ft.Column(spacing=10)
+        # Results appear under the parameters, below the fold on a phone: after a
+        # run the panel scrolls to them, or the tap looks like it did nothing.
+        results = ft.Column(spacing=10, key=ft.ScrollKey("lab-results"))
         run_btn = ft.Button(
             content=ft.Row([ft.Text(t("lab_run")), ring], tight=True, spacing=8),
             icon=ft.Icons.PLAY_ARROW,
@@ -428,6 +434,15 @@ def build_labs_view(
                 msg.value = ""
                 render_result(res)
             page.update()
+            if res is not None:
+                await scroll_to_results()
+
+        async def scroll_to_results() -> None:
+            try:
+                await asyncio.sleep(0.3)  # let the new results lay out first
+                await panel.scroll_to(scroll_key="lab-results", duration=400)
+            except Exception as err:  # not mounted (tests) or already unmounted
+                print(f"scroll to results skipped: {err}")
 
         async def apply_and_run(params: Dict[str, Any]) -> None:
             for key, value in params.items():

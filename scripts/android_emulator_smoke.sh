@@ -146,9 +146,12 @@ labs_step() {
   $UI tap "Күн қуаты және ауа райы" --contains || { fail "lab 1 card not tappable"; return; }
   sleep 5
   $UI tap "Іске қосу" --prefix || fail "Run button not found in lab 1"
+  # The app scrolls to the results after a run; swipe once more if they are
+  # still off screen after a while.
   local ran=""
-  for _ in $(seq 1 15); do
+  for i in $(seq 1 15); do
     if $UI has "DC қуаты P_DC" --contains >/dev/null 2>&1; then ran=yes; break; fi
+    [ "$i" = 8 ] && $UI swipe up
     sleep 2
   done
   shot 10_lab1_result
