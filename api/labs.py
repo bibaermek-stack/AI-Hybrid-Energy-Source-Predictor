@@ -3,9 +3,10 @@ The 12 education labs over HTTP, for the mobile app.
 
 The website renders the same labs in Streamlit from src/education/labs; the
 phone gets them here: the list, a lab's parameters and theory, a simulation
-run, the practice tasks and the final test. The 3D inverter lab itself is a
-static page (static/lab3d/, served under /static/lab3d/) that calls the test
-routes below from inside the app's WebView.
+run, the practice tasks and the final test. Formulas in the theory and the
+tasks come as Flet Markdown ($…$ with a space after a closing $). The 3D
+inverter lab itself is a static page (static/lab3d/, served under
+/static/lab3d/) that calls the test routes below from inside the app's WebView.
 """
 
 from __future__ import annotations
@@ -30,7 +31,18 @@ def _lab_or_404(lab_id: str) -> dict[str, Any]:
     return lab
 
 
+def _md(field: Any) -> Any:
+    """A {lang: text} field with its LaTeX made ready for Flet's Markdown."""
+    from src.education.labs.theory import to_flet_markdown
+
+    if isinstance(field, dict):
+        return {lang: to_flet_markdown(str(text)) for lang, text in field.items()}
+    return field
+
+
 def _summary(lab: dict[str, Any]) -> dict[str, Any]:
+    from src.education.lab_tasks import LAB_TASKS
+
     return {
         "id": lab["id"],
         "title": lab["title"],
@@ -40,6 +52,7 @@ def _summary(lab: dict[str, Any]) -> dict[str, Any]:
         "tag": lab.get("tag", {}),
         "objectives": lab["objectives"],
         "has_3d": lab["id"] in LABS_WITH_3D,
+        "task_count": len(LAB_TASKS.get(lab["id"], [])),
     }
 
 
@@ -65,10 +78,10 @@ def lab_detail(lab_id: str) -> dict[str, Any]:
             {
                 "id": t["id"],
                 "kind": t["kind"],
-                "prompt": t["prompt"],
+                "prompt": _md(t["prompt"]),
                 "choices": t.get("choices") or [],
                 "unit": t.get("unit", ""),
-                "hint": t.get("hint"),
+                "hint": _md(t.get("hint")),
             }
             for t in LAB_TASKS.get(lab_id, [])
         ],
@@ -104,6 +117,8 @@ def check_task(lab_id: str, task_id: str, req: TaskAnswer) -> dict[str, Any]:
     result = check_task_answer(lab_id, task_id, number=req.number, choice_index=req.choice_index)
     if result.get("status") == "unknown_task":
         raise HTTPException(status_code=404, detail=f"Unknown task: {task_id}")
+    for key in ("explain_en", "explain_kk"):
+        result[key] = _md({"x": result.get(key) or ""})["x"]
     return result
 
 

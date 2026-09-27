@@ -45,7 +45,7 @@ def walk(control):
             if f.name.startswith("_") or f.name in ("parent", "page"):
                 continue
             v = getattr(c, f.name, None)
-            for item in (v if isinstance(v, list) else [v]):
+            for item in v if isinstance(v, list) else [v]:
                 if ft is not None and isinstance(item, ft.BaseControl):
                     stack.append(item)
 
@@ -84,6 +84,12 @@ class _Api:
     async def lab_grade(self, lab_id, answers):
         return self.c.post(
             f"/labs/{lab_id}/test/grade", json={"answers": answers, "lang": "kk"}
+        ).json()
+
+    async def lab_task_check(self, lab_id, task_id, number=None, choice_index=None):
+        return self.c.post(
+            f"/labs/{lab_id}/tasks/{task_id}/check",
+            json={"number": number, "choice_index": choice_index},
         ).json()
 
     @staticmethod
@@ -182,6 +188,59 @@ class TestMobileLabs(unittest.TestCase):
                 self.assertTrue(back["h"]())
                 self.assertIsNone(back.get("h"))
                 self.assertIn("✅ Өтті", texts(view))
+
+            asyncio.run(scenario())
+
+    def test_practice_tasks_hint_then_solve_and_remember(self):
+        from mobile.views import labs_view
+
+        page, prefs, back = FakePage(), FakePrefs(), {}
+        with mock.patch.object(labs_view, "api_client", self.api):
+            view = labs_view.build_labs_view(page, lambda h: back.__setitem__("h", h), prefs)
+
+            async def scenario():
+                await view.data()
+                self.assertIn("Тапсырма 0/3", texts(view))
+                card = next(
+                    c
+                    for c in walk(view)
+                    if isinstance(c, ft.Container) and c.data == "lab_pv_physics"
+                )
+                card.on_click(None)
+                await self._drain(page)
+                seg = next(c for c in walk(view) if isinstance(c, ft.SegmentedButton))
+                seg.selected = ["tasks"]
+                seg.on_change(mock.Mock(control=seg))
+                # Formulas reach Flet's Markdown with a space after each closing $
+                prompts = [c.value for c in walk(view) if isinstance(c, ft.Markdown)]
+                self.assertTrue(any("$P_{DC}$ …" in p for p in prompts), prompts)
+
+                field = next(
+                    c for c in walk(view) if isinstance(c, ft.TextField) and c.data == "eta_eff"
+                )
+                check = next(
+                    c for c in walk(view) if isinstance(c, ft.Button) and c.data == "check:eta_eff"
+                )
+                field.value = "abc"
+                await check.on_click(None)
+                self.assertTrue(any("Сан енгізіңіз" in t for t in texts(view)))
+
+                field.value = "0,5"  # wrong; a comma decimal is accepted
+                await check.on_click(None)
+                self.assertTrue(any("Қате" in t for t in texts(view)))
+                self.assertNotIn("eta_eff", prefs.store.get("ecopredict.labs_tasks_done", ""))
+
+                field.value = "0,184"
+                await check.on_click(None)
+                self.assertTrue(any("Дұрыс" in t for t in texts(view)))
+                self.assertEqual(
+                    json.loads(prefs.store["ecopredict.labs_tasks_done"]),
+                    {"lab_pv_physics": ["eta_eff"]},
+                )
+                self.assertIn("Орындалды: 3 тапсырманың 1-і", texts(view))
+
+                self.assertTrue(back["h"]())
+                self.assertIn("Тапсырма 1/3", texts(view))
 
             asyncio.run(scenario())
 

@@ -76,6 +76,28 @@ class TestLabsApi(unittest.TestCase):
             self.c.post("/labs/lab_pv_physics/tasks/zzz/check", json={"number": 1}).status_code, 404
         )
 
+    def test_tasks_come_as_flet_markdown(self):
+        labs = {lab["id"]: lab for lab in self.c.get("/labs").json()["labs"]}
+        self.assertEqual(labs["lab_pv_physics"]["task_count"], 3)
+        tasks = self.c.get("/labs/lab_pv_physics").json()["tasks"]
+        choice = next(t for t in tasks if t["kind"] == "choice")
+        # "$P_{DC}$ becomes" keeps its space; the choices stay plain text
+        self.assertIn("$P_{DC}$ becomes", choice["prompt"]["en"])
+        self.assertTrue(all(isinstance(ch, dict) for ch in choice["choices"]))
+        # "$P_{DC}$…" is glued: Flet's Markdown needs the space to close the math
+        double = next(t for t in tasks if t["id"] == "double_g")
+        self.assertIn("$P_{DC}$ …", double["prompt"]["kk"])
+        hint = next(
+            t
+            for t in self.c.get("/labs/lab_bess_soc").json()["tasks"]
+            if t["id"] == "soc_after_charge"
+        )["hint"]["kk"]
+        self.assertIn("$E_{cap}$ -қа", hint)
+        explain = self.c.post(
+            "/labs/lab_pv_physics/tasks/eta_eff/check", json={"number": 0.184}
+        ).json()["explain_kk"]
+        self.assertIn("$\\eta_{eff}=0.20", explain)
+
 
 class TestTheoryForFlet(unittest.TestCase):
     def test_suffix_after_inline_math_is_spaced(self):

@@ -474,6 +474,22 @@ class APIClient:
         )
         return res if isinstance(res, dict) else None
 
+    async def lab_task_check(
+        self,
+        lab_id: str,
+        task_id: str,
+        number: Optional[float] = None,
+        choice_index: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Check one practice task (POST /labs/{id}/tasks/{task}/check)."""
+        res = await asyncio.to_thread(
+            _http_post_sync,
+            f"{state.api_base_url}/labs/{lab_id}/tasks/{task_id}/check",
+            {"number": number, "choice_index": choice_index},
+            self.timeout,
+        )
+        return res if isinstance(res, dict) else None
+
     @staticmethod
     def lab_viewer_url(viewer_path: str) -> str:
         """The 3D lab page on the API server; it calls back to the same server."""

@@ -3,8 +3,8 @@ The 12 education labs in the mobile app.
 
 The same labs as the website (dashboard/views/labs.py), served by the API
 (api/labs.py): the list, each lab's theory, a run with its parameters
-(computed on the server by src/education/labs/runner.py) and the final test,
-graded on the server. Lab 12 is the 3D inverter model: the page from
+(computed on the server by src/education/labs/runner.py), the practice tasks
+checked one by one, and the final test, graded on the server. Lab 12 is the 3D inverter model: the page from
 static/lab3d/ in a WebView, which reports its events through console
 messages ("LAB3D {json}").
 
@@ -33,6 +33,7 @@ except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
 
 PREF_PASSED = "ecopredict.labs_passed"
+PREF_TASKS = "ecopredict.labs_tasks_done"  # {lab_id: [task ids solved]}
 WEBVIEW_PLATFORMS = {ft.PagePlatform.ANDROID, ft.PagePlatform.IOS, ft.PagePlatform.MACOS}
 
 
@@ -70,19 +71,28 @@ def build_labs_view(
     c = state.colors
     t = state.text
     root = ft.Column(expand=True, spacing=0)
-    data: Dict[str, Any] = {"labs": None, "passed": set(), "loading": False, "open": None}
+    data: Dict[str, Any] = {
+        "labs": None,
+        "passed": set(),
+        "tasks_done": {},
+        "loading": False,
+        "open": None,
+    }
 
     def register_back(handler: Optional[Callable[[], bool]]) -> None:
         if set_back_handler:
             set_back_handler(handler)
 
-    # ---- progress (which tests were passed), kept on the phone ------------
+    # ---- progress (tests passed, tasks solved), kept on the phone -----------
     async def load_passed() -> None:
         if prefs is None:
             return
         try:
             raw = await asyncio.wait_for(prefs.get(PREF_PASSED), timeout=3)
             data["passed"] = set(json.loads(raw)) if raw else set()
+            raw = await asyncio.wait_for(prefs.get(PREF_TASKS), timeout=3)
+            done = json.loads(raw) if raw else {}
+            data["tasks_done"] = {k: set(v) for k, v in done.items() if isinstance(v, list)}
         except Exception as err:
             print(f"Lab progress not loaded: {err}")
 
@@ -93,6 +103,16 @@ def build_labs_view(
                 await prefs.set(PREF_PASSED, json.dumps(sorted(data["passed"])))
             except Exception as err:
                 print(f"Lab progress not saved: {err}")
+
+    async def mark_task_done(lab_id: str, task_id: str) -> None:
+        data["tasks_done"].setdefault(lab_id, set()).add(task_id)
+        if prefs is not None:
+            try:
+                await prefs.set(
+                    PREF_TASKS, json.dumps({k: sorted(v) for k, v in data["tasks_done"].items()})
+                )
+            except Exception as err:
+                print(f"Task progress not saved: {err}")
 
     # ---- list of labs --------------------------------------------------------
     list_column = ft.ListView(spacing=10, padding=12, expand=True)
@@ -110,6 +130,16 @@ def build_labs_view(
                     bgcolor=c["primary"],
                     border_radius=6,
                     padding=ft.Padding.symmetric(horizontal=6, vertical=1),
+                )
+            )
+        total = int(lab.get("task_count") or 0)
+        if total:
+            done = len(data["tasks_done"].get(lab["id"], ()))
+            badges.append(
+                ft.Text(
+                    t("lab_tasks_badge", done=done, total=total),
+                    size=11,
+                    color=c["success"] if done >= total else c["text_secondary"],
                 )
             )
         if lab["id"] in data["passed"]:
@@ -277,6 +307,7 @@ def build_labs_view(
                 ft.Segment(
                     value="lab", label=ft.Text(t("lab_tab_3d") if is_3d else t("lab_tab_lab"))
                 ),
+                ft.Segment(value="tasks", label=ft.Text(t("lab_tab_tasks"))),
                 ft.Segment(value="test", label=ft.Text(t("lab_tab_test"))),
             ],
             selected=["lab"],
@@ -307,6 +338,7 @@ def build_labs_view(
                 page.run_task(apply_and_run, params)
 
             panels["test"] = build_test_panel(lab_id, apply_from_test)
+        panels["tasks"] = build_tasks_panel(lab_id, detail.get("tasks") or [])
         body.content = panels["lab"]
         return ft.Column(
             [
@@ -648,6 +680,166 @@ def build_labs_view(
 
         panel.controls = [ft.ProgressRing()]
         page.run_task(load)
+        return panel
+
+    # ---- practice tasks: checked one by one on the server, as on the website ---
+    def build_tasks_panel(lab_id: str, tasks: List[Dict[str, Any]]) -> ft.Control:
+        panel = ft.ListView(spacing=10, padding=12, expand=True)
+        if not tasks:
+            panel.controls = [ft.Text(t("tasks_none"), size=12, color=c["text_secondary"])]
+            return panel
+        progress = ft.Text("", size=12, weight=ft.FontWeight.BOLD)
+
+        def refresh_progress() -> None:
+            done = len(data["tasks_done"].get(lab_id, ()))
+            if done >= len(tasks):
+                progress.value, progress.color = t("tasks_all_done"), c["success"]
+            else:
+                progress.value = t("tasks_progress", done=done, total=len(tasks))
+                progress.color = c["text_secondary"]
+
+        def md(text: str) -> ft.Markdown:
+            return ft.Markdown(text, extension_set=ft.MarkdownExtensionSet.GITHUB_WEB)
+
+        def task_card(i: int, task: Dict[str, Any]) -> ft.Control:
+            tid, is_choice = task["id"], task["kind"] == "choice"
+            done_mark = ft.Text(
+                t("task_done"),
+                size=11,
+                color=c["success"],
+                visible=tid in data["tasks_done"].get(lab_id, set()),
+            )
+            feedback = ft.Text("", size=12, visible=False, selectable=True)
+            box = dict(padding=10, border_radius=10, bgcolor=c["surface_variant"])
+            hint = ft.Container(md(_loc(task.get("hint"))), visible=False, **box)
+            explain = ft.Container(visible=False, **box)
+            ring = ft.ProgressRing(visible=False, width=16, height=16, stroke_width=2)
+
+            if is_choice:
+                answer: ft.Control = ft.RadioGroup(content=ft.Column(spacing=0), data=tid)
+
+                def pick(e, group=answer) -> None:
+                    group.value = e.control.data
+                    group.update()
+
+                answer.content.controls = [
+                    ft.Row(
+                        [
+                            ft.Radio(value=str(j)),
+                            ft.Container(
+                                ft.Text(_loc(ch), size=13, color=c["text_primary"]),
+                                expand=True,
+                                data=str(j),
+                                on_click=pick,
+                            ),
+                        ],
+                        spacing=0,
+                    )
+                    for j, ch in enumerate(task.get("choices") or [])
+                ]
+            else:
+                unit = task.get("unit") or ""
+                answer = ft.TextField(
+                    label=t("test_answer") + (f" ({unit})" if unit else ""),
+                    keyboard_type=ft.KeyboardType.NUMBER,
+                    dense=True,
+                    data=tid,
+                )
+
+            def show(text: str, color: str) -> None:
+                feedback.value, feedback.color, feedback.visible = text, color, True
+                page.update()
+
+            async def check(e=None) -> None:
+                number, choice = None, None
+                if is_choice:
+                    if answer.value in (None, ""):
+                        show(t("task_pick"), c["warning"])
+                        return
+                    choice = int(answer.value)
+                else:
+                    try:
+                        number = float(str(answer.value or "").replace(",", ".").strip())
+                    except ValueError:
+                        show(t("task_enter_number"), c["warning"])
+                        return
+                ring.visible = True
+                page.update()
+                res = await api_client.lab_task_check(
+                    lab_id, tid, number=number, choice_index=choice
+                )
+                ring.visible = False
+                if res is None:
+                    show(t("task_err", reason=_reason()), c["error"])
+                    return
+                lang = state.lang
+                message = res.get(f"message_{lang}") or res.get("message_en") or ""
+                if res.get("ok"):
+                    explain.content = md(res.get(f"explain_{lang}") or "")
+                    explain.visible, hint.visible, done_mark.visible = True, False, True
+                    await mark_task_done(lab_id, tid)
+                    refresh_progress()
+                    show(message, c["success"])
+                else:
+                    # A wrong answer opens the hint; the solution stays hidden.
+                    explain.visible, hint.visible = False, True
+                    show(message, c["error"])
+
+            def toggle_hint(e=None) -> None:
+                hint.visible = not hint.visible
+                page.update()
+
+            return ft.Container(
+                ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Text(
+                                    f"{i}.", weight=ft.FontWeight.BOLD, color=c["text_primary"]
+                                ),
+                                done_mark,
+                            ],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                        md(_loc(task.get("prompt"))),
+                        answer,
+                        ft.Row(
+                            [
+                                ft.Button(
+                                    t("task_check"),
+                                    icon=ft.Icons.CHECK,
+                                    on_click=check,
+                                    data=f"check:{tid}",
+                                ),
+                                ft.TextButton(
+                                    t("task_hint"),
+                                    icon=ft.Icons.LIGHTBULB_OUTLINE,
+                                    on_click=toggle_hint,
+                                ),
+                                ring,
+                            ],
+                            spacing=6,
+                            wrap=True,
+                        ),
+                        feedback,
+                        hint,
+                        explain,
+                    ],
+                    spacing=6,
+                ),
+                padding=12,
+                border_radius=14,
+                bgcolor=c["surface"],
+                border=ft.Border.all(1, c["card_border"]),
+            )
+
+        refresh_progress()
+        panel.controls = [
+            ft.Text(t("tasks_intro"), size=11, color=c["text_secondary"]),
+            progress,
+            *[task_card(i, task) for i, task in enumerate(tasks, start=1)],
+            ft.Container(height=24),
+        ]
         return panel
 
     # ---- lab 12: the 3D model ------------------------------------------------
