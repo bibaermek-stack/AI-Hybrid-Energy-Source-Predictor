@@ -124,7 +124,55 @@ class TestClassroomApi(ClassroomCase):
             json={"number": 0.184, "student": {"class_code": cls["code"], "token": "nope"}},
         )
         self.assertEqual(r.json()["status"], "correct")
-        self.assertTrue(self.c.get("/classes/status").json()["configured"])
+        status = self.c.get("/classes/status").json()
+        self.assertTrue(status["ok"] and status["persistent"], status)
+
+
+PG_URL = os.environ.get("CLASSROOM_TEST_PG")
+
+
+@unittest.skipUnless(PG_URL, "set CLASSROOM_TEST_PG to a Postgres URL to run these on Postgres")
+class TestClassroomOnPostgres(TestClassroomApi):
+    """The same routes on Postgres, as on Railway (DATABASE_URL, postgresql://)."""
+
+    test_teacher_key_is_kept_as_a_hash_only = None  # reads the SQLite file
+
+    def setUp(self):
+        self.env = mock.patch.dict(os.environ, {"DATABASE_URL": PG_URL})
+        self.env.start()
+        os.environ.pop("CLASSROOM_DB", None)
+        self.tmp = tempfile.TemporaryDirectory()
+        from api import classroom
+
+        classroom.meta.drop_all(classroom.engine())
+        classroom.meta.create_all(classroom.engine())
+        from api.labs import router as labs
+        from api.learn import router as learn
+
+        app = FastAPI()
+        for r in (classroom.router, labs, learn):
+            app.include_router(r)
+        self.c = TestClient(app)
+
+    def test_status_reports_postgres(self):
+        status = self.c.get("/classes/status").json()
+        self.assertEqual(
+            (status["backend"], status["persistent"], status["ok"]), ("postgresql", True, True)
+        )
+
+
+class TestDbUrl(unittest.TestCase):
+    def test_railway_urls_get_the_installed_driver(self):
+        from src.utils.db_url import normalize_db_url
+
+        self.assertEqual(
+            normalize_db_url("postgres://u:p@h:5432/db"), "postgresql+psycopg2://u:p@h:5432/db"
+        )
+        self.assertEqual(normalize_db_url("postgresql://u@h/db"), "postgresql+psycopg2://u@h/db")
+        self.assertEqual(
+            normalize_db_url("postgresql+psycopg2://u@h/db"), "postgresql+psycopg2://u@h/db"
+        )
+        self.assertEqual(normalize_db_url("sqlite:///x.db"), "sqlite:///x.db")
 
 
 class TestMobileStudentIdentity(unittest.TestCase):

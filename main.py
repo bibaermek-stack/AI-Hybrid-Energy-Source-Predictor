@@ -30,7 +30,10 @@ if DATABASE_URL:
     logger.info("DATABASE_URL detected: %s", DATABASE_URL.split("@")[-1] if "@" in DATABASE_URL else "configured")
     try:
         import sqlalchemy
-        engine = sqlalchemy.create_engine(DATABASE_URL, pool_pre_ping=True)
+
+        from src.utils.db_url import normalize_db_url
+
+        engine = sqlalchemy.create_engine(normalize_db_url(DATABASE_URL), pool_pre_ping=True)
         with engine.connect() as conn:
             conn.execute(sqlalchemy.text("SELECT 1"))
         db_status = "connected"

@@ -55,7 +55,8 @@ How the pieces fit:
 - Classes (`api/classroom.py`): a teacher creates a class in the app (More → Teacher) and gives its code to the
   students, who join under Labs. The server records what it grades (lab tests, practice tasks, lesson quizzes) under
   the student; the teacher reads the table in the app or at `/static/classroom/index.html` (code + teacher key; only
-  the key's hash is stored). Storage: SQLite at `$CLASSROOM_DB` — on Railway put it on a volume.
+  the key's hash is stored). Storage: the service's Postgres (`DATABASE_URL`, tables `classroom_*`), else SQLite at
+  `$CLASSROOM_DB` / `data/classroom.sqlite3` for local runs. `GET /classes/status` says which and whether it answers.
 - `static/lab3d/` — the 3D viewer (three.js bundled locally, no CDN), meshes and `assembly.json` (which mesh is
   which part, kk/en). Rebuild meshes and `lab_state.json` with `python scripts/build_lab3d_assets.py`;
   `tests/test_lab3d_assets.py` fails when they are stale. On the site it is a Streamlit component

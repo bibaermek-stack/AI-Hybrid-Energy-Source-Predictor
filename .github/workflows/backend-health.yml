@@ -160,9 +160,11 @@ jobs:
           code, room = get("/classes/status")
           if code != 200 or not isinstance(room, dict):
               print(f"::warning::/classes/status -> {code} (server not redeployed from main yet?)")
-          elif not room.get("configured"):
-              print("::warning::CLASSROOM_DB is not set: class results are lost on every deploy. "
-                    "Add a Railway volume and set CLASSROOM_DB to a file on it.")
+          elif not room.get("ok"):
+              raise SystemExit(f"::error::Class storage ({room.get('backend')}) does not answer: {room.get('error')}")
+          elif not room.get("persistent"):
+              print("::warning::Class results are in a local file and are lost on every deploy: "
+                    "attach the project's Postgres (DATABASE_URL) to the service.")
           else:
-              print(f"OK: class results stored at {room.get('db')}")
+              print(f"OK: class results stored in {room.get('backend')}")
           EOF
