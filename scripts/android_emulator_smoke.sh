@@ -24,7 +24,14 @@ echo "APK=$APK PKG=$PKG"
 failures=0
 pass() { echo "PASS: $*"; }
 fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
-shot() { adb exec-out screencap -p > "$OUT/$1.png"; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb exec-out cat /sdcard/ui.xml > "$OUT/$1.xml"; }
+# The dump file is removed first: when uiautomator cannot dump (a WebGL view
+# that never goes idle), the previous screen's dump must not stand in for it.
+shot() {
+  adb exec-out screencap -p > "$OUT/$1.png"
+  adb shell rm -f /sdcard/ui.xml
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+  adb exec-out cat /sdcard/ui.xml > "$OUT/$1.xml" 2>/dev/null || : > "$OUT/$1.xml"
+}
 in_front() { adb shell dumpsys window | grep -E "mCurrentFocus=|mFocusedApp=" | grep -q "$PKG"; }
 # Visible labels of a saved UI dump, one per line (for evidence in the log).
 labels_of() { grep -oE '(text|content-desc)="[^"]+"' "$OUT/$1.xml" | sed -E 's/^[a-z-]+="//; s/"$//' | tr '\n' '|' ; echo; }
