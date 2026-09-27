@@ -19,6 +19,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+from api.classroom import StudentRef, record
+
 router = APIRouter()
 
 VIEWER_PATH = "/static/lab3d/index.html"
@@ -110,6 +112,7 @@ def run(lab_id: str, req: RunRequest) -> dict[str, Any]:
 class TaskAnswer(BaseModel):
     number: Optional[float] = None
     choice_index: Optional[int] = None
+    student: Optional[StudentRef] = None  # a class member: the solved task is recorded
 
 
 @router.post("/labs/{lab_id}/tasks/{task_id}/check")
@@ -120,6 +123,8 @@ def check_task(lab_id: str, task_id: str, req: TaskAnswer) -> dict[str, Any]:
     result = check_task_answer(lab_id, task_id, number=req.number, choice_index=req.choice_index)
     if result.get("status") == "unknown_task":
         raise HTTPException(status_code=404, detail=f"Unknown task: {task_id}")
+    if result.get("ok"):
+        record(req.student, "lab_task", lab_id, 100.0, True, sub=task_id)
     for key in ("explain_en", "explain_kk"):
         result[key] = _md({"x": result.get(key) or ""})["x"]
     return result
@@ -136,6 +141,7 @@ def get_test(lab_id: str, lang: str = "kk") -> dict[str, Any]:
 class GradeRequest(BaseModel):
     answers: dict[str, Any] = Field(default_factory=dict)
     lang: str = "kk"
+    student: Optional[StudentRef] = None  # a class member: the result is recorded
 
 
 @router.post("/labs/{lab_id}/test/grade")
@@ -143,7 +149,9 @@ def grade(lab_id: str, req: GradeRequest) -> dict[str, Any]:
     from src.education.labs.lab_tests import grade_test
 
     _lab_or_404(lab_id)
-    return grade_test(lab_id, req.answers, req.lang)
+    result = grade_test(lab_id, req.answers, req.lang)
+    record(req.student, "lab_test", lab_id, result["percent"], result["passed"])
+    return result
 
 
 # ---- the student's report ----------------------------------------------------

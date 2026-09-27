@@ -88,3 +88,6 @@ build/
 # ============================================================
 EcoPredict AI/
 sync_root.py
+
+# Class results (api/classroom.py); on a server this lives on a volume
+data/classroom.sqlite3*

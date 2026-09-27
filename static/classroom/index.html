@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="kk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoPredict AI · Сынып</title>
+<style>
+  :root { --bg:#0b1220; --card:#121b2e; --line:#243049; --text:#e5e7eb; --muted:#9ca3af; --accent:#3b82f6; --ok:#10b981; --warn:#f59e0b; --bad:#ef4444; }
+  @media (prefers-color-scheme: light) { :root { --bg:#f8fafc; --card:#fff; --line:#e2e8f0; --text:#0f172a; --muted:#64748b; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:1200px; margin:0 auto; padding:20px 16px 40px; }
+  h1 { font-size:20px; margin:0 0 4px; } .muted { color:var(--muted); }
+  form { display:flex; flex-wrap:wrap; gap:8px; align-items:end; margin:16px 0; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input { background:transparent; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:inherit; min-width:160px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; font:inherit; cursor:pointer; }
+  button.secondary { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .wrap { overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--card); }
+  table { border-collapse:collapse; width:100%; min-width:900px; }
+  th, td { padding:7px 9px; border-bottom:1px solid var(--line); text-align:center; white-space:nowrap; }
+  th { font-size:12px; color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--card); }
+  td:first-child, th:first-child { text-align:left; position:sticky; left:0; background:var(--card); }
+  .ok { color:var(--ok); font-weight:600; } .warn { color:var(--warn); } .none { color:var(--muted); }
+  .error { color:var(--bad); margin:8px 0; } [hidden] { display:none !important; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Сынып нәтижелері</h1>
+  <div class="muted" id="intro">Сынып кодын және оқытушы кілтін енгізіңіз. Нәтижелерді сервер бағалаған (тест, тапсырма, сабақ тесті).</div>
+  <form id="form">
+    <label><span id="l-code">Сынып коды</span><input id="code" autocomplete="off" required maxlength="8"></label>
+    <label><span id="l-key">Оқытушы кілті</span><input id="key" type="password" autocomplete="off" required></label>
+    <button id="show" type="submit">Көрсету</button>
+  </form>
+  <div class="error" id="error" hidden></div>
+  <section id="out" hidden>
+    <div class="bar"><strong id="cls"></strong><span class="muted" id="count"></span>
+      <button class="secondary" id="csv" type="button">CSV</button>
+      <button class="secondary" id="refresh" type="button">↻</button></div>
+    <div class="wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+    <p class="muted" id="legend"></p>
+  </section>
+</main>
+<script>
+(function () {
+  const T = {
+    kk: { title: 'Сынып нәтижелері', student: 'Студент', passed: 'Өтті', avg: 'Тест орт.', tasks: 'Тапсырма',
+          quizzes: 'Сабақ тесті', seen: 'Соңғы белсенділік', students: 'студент', show: 'Көрсету',
+          legend: 'Әр зертхана бағанында: тесттің ең жоғары нәтижесі (✓ — өтті) және шешілген тапсырмалар саны.',
+          error: 'Жүктелмеді: ' },
+    en: { title: 'Class results', student: 'Student', passed: 'Passed', avg: 'Test avg', tasks: 'Tasks',
+          quizzes: 'Lesson quizzes', seen: 'Last active', students: 'students', show: 'Show',
+          legend: 'Each lab column: best test score (✓ passed) and tasks solved.', error: 'Not loaded: ' },
+  };
+  const lang = (new URLSearchParams(location.search).get('lang') || 'kk') === 'en' ? 'en' : 'kk';
+  const L = T[lang];
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  $('title').textContent = L.title; $('show').textContent = L.show;
+  document.documentElement.lang = lang;
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (hash.get('code')) $('code').value = hash.get('code');
+  let last = null;
+
+  async function load() {
+    const code = $('code').value.trim().toUpperCase();
+    const key = $('key').value.trim();
+    $('error').hidden = true;
+    try {
+      const r = await fetch(`${location.origin}/classes/${encodeURIComponent(code)}/results`, { headers: { 'X-Teacher-Key': key } });
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.detail || r.status);
+      last = body; render(body);
+    } catch (e) {
+      $('error').textContent = L.error + e.message; $('error').hidden = false; $('out').hidden = true;
+    }
+  }
+
+  function render(res) {
+    const labs = res.labs || [];
+    $('cls').textContent = `${res.name} · ${res.code}`;
+    $('count').textContent = `${(res.students || []).length} ${L.students}`;
+    $('thead').innerHTML = '<tr>' + [L.student, L.passed, L.avg, L.tasks, L.quizzes]
+      .map((h) => `<th>${esc(h)}</th>`).join('')
+      + labs.map((lab, i) => `<th title="${esc(lab.title[lang] || lab.title.en)}">${i + 1}</th>`).join('')
+      + `<th>${esc(L.seen)}</th></tr>`;
+    $('tbody').innerHTML = (res.students || []).map((st) => {
+      const per = st.labs || {};
+      const cells = labs.map((lab) => {
+        const g = per[lab.id];
+        if (!g) return '<td class="none">—</td>';
+        const test = g.test == null ? '—' : `${Math.round(g.test)}%${g.passed ? ' ✓' : ''}`;
+        return `<td class="${g.passed ? 'ok' : 'warn'}">${test}<br><small>${(g.tasks || []).length}/${lab.tasks}</small></td>`;
+      }).join('');
+      const seen = new Date((st.last_seen || 0) * 1000).toLocaleString(lang === 'kk' ? 'kk-KZ' : 'en-GB');
+      return `<tr><td>${esc(st.name)}</td><td>${st.labs_passed}/12</td><td>${st.test_avg == null ? '—' : Math.round(st.test_avg) + '%'}</td>`
+        + `<td>${st.tasks_done}</td><td>${Object.keys(st.quizzes || {}).length}</td>${cells}<td>${esc(seen)}</td></tr>`;
+    }).join('');
+    $('legend').textContent = L.legend;
+    $('out').hidden = false;
+  }
+
+  function csv() {
+    if (!last) return;
+    const labs = last.labs || [];
+    const rows = [[L.student, L.passed, L.avg, L.tasks, ...labs.map((_, i) => `${i + 1} %`), ...labs.map((_, i) => `${i + 1} ${L.tasks}`)]];
+    for (const st of last.students || []) {
+      const per = st.labs || {};
+      rows.push([st.name, st.labs_passed, st.test_avg ?? '', st.tasks_done,
+        ...labs.map((l) => (per[l.id] && per[l.id].test != null ? per[l.id].test : '')),
+        ...labs.map((l) => (per[l.id] ? (per[l.id].tasks || []).length : 0))]);
+    }
+    const text = '﻿' + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+    a.download = `class_${last.code}.csv`; a.click();
+  }
+
+  $('form').addEventListener('submit', (e) => { e.preventDefault(); load(); });
+  $('refresh').addEventListener('click', load);
+  $('csv').addEventListener('click', csv);
+})();
+</script>
+</body>
+</html>

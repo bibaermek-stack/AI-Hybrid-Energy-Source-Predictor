@@ -155,4 +155,14 @@ jobs:
               print("OK: the 3D lab page and its files are served")
           if problems:
               raise SystemExit("::error::Labs API broken: " + "; ".join(problems))
+
+          # Classes (api/classroom.py): results must survive a redeploy.
+          code, room = get("/classes/status")
+          if code != 200 or not isinstance(room, dict):
+              print(f"::warning::/classes/status -> {code} (server not redeployed from main yet?)")
+          elif not room.get("configured"):
+              print("::warning::CLASSROOM_DB is not set: class results are lost on every deploy. "
+                    "Add a Railway volume and set CLASSROOM_DB to a file on it.")
+          else:
+              print(f"OK: class results stored at {room.get('db')}")
           EOF

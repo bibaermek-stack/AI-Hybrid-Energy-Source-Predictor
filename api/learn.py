@@ -10,10 +10,12 @@ quiz comes without the answers; grading happens here.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+
+from api.classroom import StudentRef, record
 
 router = APIRouter()
 
@@ -114,9 +116,13 @@ def quiz(quiz_id: str, lang: str = "kk") -> dict[str, Any]:
     }
 
 
+QUIZ_PASS_PERCENT = 70
+
+
 class QuizAnswers(BaseModel):
     answers: dict[str, int] = Field(default_factory=dict)
     lang: str = "kk"
+    student: Optional[StudentRef] = None  # a class member: the result is recorded
 
 
 @router.post("/learn/quizzes/{quiz_id}/grade")
@@ -130,4 +136,6 @@ def grade(quiz_id: str, req: QuizAnswers) -> dict[str, Any]:
     explain = {q["id"]: q["explain"] for q in got["questions"]}
     for d in result["details"]:
         d["explain"] = explain.get(d["id"], "")
+    result["passed"] = result["percent"] >= QUIZ_PASS_PERCENT
+    record(req.student, "quiz", quiz_id, result["percent"], result["passed"])
     return result

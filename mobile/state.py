@@ -2,11 +2,14 @@
 Global Application State Manager for EcoPredict AI Mobile.
 """
 
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 try:
     from mobile.config import DEFAULT_API_BASE, COLORS, get_text
 except (ImportError, ModuleNotFoundError):
     from config import DEFAULT_API_BASE, COLORS, get_text  # type: ignore # pyright: ignore[reportMissingImports]
+
+
+PREF_CLASSROOM = "ecopredict.classroom"  # the class joined as a student (JSON)
 
 
 class AppState:
@@ -48,6 +51,9 @@ class AppState:
         self.pending_lab: str = ""
         # Solarman station alerts (mobile/solar_alerts.py), checked while the
         # app is open; screens that show them register under a name.
+        # The class this phone joined as a student: {code, token, class_name,
+        # name}; graded answers carry it so the teacher sees the results.
+        self.classroom: Optional[Dict[str, str]] = None
         self.alerts_enabled: bool = True
         self.solar_alerts: List[Dict[str, Any]] = []
         self.alert_listeners: Dict[str, Callable[[List[Dict[str, Any]]], None]] = {}

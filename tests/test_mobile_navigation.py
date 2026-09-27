@@ -31,7 +31,7 @@ class TestNavigation(unittest.TestCase):
         self.assertEqual(self.nav.MORE_KEYS & set(self.nav.TAB_KEYS), set())
         self.assertEqual(
             self.nav.MORE_KEYS,
-            {"faults", "opt", "sustainability", "labs", "training", "learn", "settings"},
+            {"faults", "opt", "sustainability", "labs", "training", "learn", "teacher", "settings"},
         )
 
     def test_more_screens_highlight_the_more_tab(self):

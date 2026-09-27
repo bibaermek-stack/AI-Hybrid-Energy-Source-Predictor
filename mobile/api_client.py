@@ -112,6 +112,48 @@ def _http_post_sync(
     return None
 
 
+def _http_json_sync(
+    method: str,
+    url: str,
+    payload: Optional[Dict[str, Any]] = None,
+    headers: Optional[Dict[str, str]] = None,
+    timeout: float = 20.0,
+) -> Optional[Dict[str, Any]]:
+    """Any method with a JSON body and extra headers (the classroom routes)."""
+    global last_http_error
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "EcoPredict-Mobile/1.0",
+                "Accept": "application/json",
+                **(headers or {}),
+            },
+            method=method,
+        )
+        with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CONTEXT) as resp:
+            if resp.status == 200:
+                return json.loads(resp.read().decode("utf-8"))
+            last_http_error = f"HTTP {resp.status} from {url}"
+    except urllib.error.HTTPError as e:
+        last_http_error = _describe_http_error(e)
+        logger.warning("HTTP %s %s rejected: %s", method, url, last_http_error)
+    except Exception as e:
+        last_http_error = f"{type(e).__name__}: {e}"
+        logger.warning("HTTP %s error for %s: %s", method, url, e)
+    return None
+
+
+def _student() -> Optional[Dict[str, str]]:
+    """The class this phone joined, sent with every graded answer."""
+    room = state.classroom
+    if room and room.get("code") and room.get("token"):
+        return {"class_code": room["code"], "token": room["token"]}
+    return None
+
+
 def _http_post_file_sync(
     url: str,
     content: bytes,
@@ -513,7 +555,7 @@ class APIClient:
         res = await asyncio.to_thread(
             _http_post_sync,
             f"{state.api_base_url}/labs/{lab_id}/test/grade",
-            {"answers": answers, "lang": state.lang},
+            {"answers": answers, "lang": state.lang, "student": _student()},
             60.0,
         )
         return res if isinstance(res, dict) else None
@@ -529,7 +571,7 @@ class APIClient:
         res = await asyncio.to_thread(
             _http_post_sync,
             f"{state.api_base_url}/labs/{lab_id}/tasks/{task_id}/check",
-            {"number": number, "choice_index": choice_index},
+            {"number": number, "choice_index": choice_index, "student": _student()},
             self.timeout,
         )
         return res if isinstance(res, dict) else None
@@ -565,7 +607,7 @@ class APIClient:
         res = await asyncio.to_thread(
             _http_post_sync,
             f"{state.api_base_url}/learn/quizzes/{quiz_id}/grade",
-            {"answers": answers, "lang": state.lang},
+            {"answers": answers, "lang": state.lang, "student": _student()},
             self.timeout,
         )
         return res if isinstance(res, dict) else None
@@ -574,7 +616,50 @@ class APIClient:
     def lab_viewer_url(viewer_path: str) -> str:
         """The 3D lab page on the API server; it calls back to the same server."""
         base = state.api_base_url
-        return f"{base}{viewer_path}?lang={state.lang}&api={urllib.parse.quote(base, safe='')}"
+        url = f"{base}{viewer_path}?lang={state.lang}&api={urllib.parse.quote(base, safe='')}"
+        student = _student()
+        if student:  # the viewer sends it with the test, so the class sees the result
+            url += "&" + urllib.parse.urlencode(
+                {"class": student["class_code"], "token": student["token"]}
+            )
+        return url
+
+    # ---- classes (api/classroom.py) ---------------------------------------
+    async def classroom_create(self, name: str) -> Optional[Dict[str, Any]]:
+        """A new class: its code for the students and the teacher key."""
+        return await asyncio.to_thread(
+            _http_json_sync, "POST", f"{state.api_base_url}/classes", {"name": name}
+        )
+
+    async def classroom_join(self, code: str, name: str) -> Optional[Dict[str, Any]]:
+        """Join a class with its code; returns the class name and this phone's token."""
+        code = urllib.parse.quote(code.strip().upper(), safe="")
+        return await asyncio.to_thread(
+            _http_json_sync, "POST", f"{state.api_base_url}/classes/{code}/join", {"name": name}
+        )
+
+    async def classroom_results(self, code: str, key: str) -> Optional[Dict[str, Any]]:
+        """The class table (teacher key required)."""
+        code = urllib.parse.quote(code.strip().upper(), safe="")
+        return await asyncio.to_thread(
+            _http_json_sync,
+            "GET",
+            f"{state.api_base_url}/classes/{code}/results",
+            None,
+            {"X-Teacher-Key": key},
+        )
+
+    async def classroom_remove(
+        self, code: str, key: str, student_id: int
+    ) -> Optional[Dict[str, Any]]:
+        code = urllib.parse.quote(code.strip().upper(), safe="")
+        return await asyncio.to_thread(
+            _http_json_sync,
+            "DELETE",
+            f"{state.api_base_url}/classes/{code}/students/{int(student_id)}",
+            None,
+            {"X-Teacher-Key": key},
+        )
 
 
 api_client = APIClient()

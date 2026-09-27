@@ -9,6 +9,7 @@ and colours (they read state.colors / state.text when built).
 """
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -32,7 +33,7 @@ try:
         build_nav_rail,
         tab_index,
     )
-    from mobile.state import state
+    from mobile.state import PREF_CLASSROOM, state
     from mobile.views.chat_view import build_chat_view
     from mobile.views.faults_view import build_faults_view
     from mobile.views.forecast_hub_view import build_forecast_hub
@@ -45,6 +46,7 @@ try:
     from mobile.views.overview_view import build_overview_view
     from mobile.views.settings_view import build_settings_view
     from mobile.views.sustainability_view import build_sustainability_view
+    from mobile.views.teacher_view import build_teacher_view
     from mobile.views.training_view import build_training_view
 except (ImportError, ModuleNotFoundError):
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
@@ -60,7 +62,7 @@ except (ImportError, ModuleNotFoundError):
         build_nav_rail,
         tab_index,
     )
-    from state import state  # type: ignore # pyright: ignore[reportMissingImports]
+    from state import PREF_CLASSROOM, state  # type: ignore # pyright: ignore[reportMissingImports]
     from views.chat_view import (
         build_chat_view,  # type: ignore # pyright: ignore[reportMissingImports]
     )
@@ -96,6 +98,9 @@ except (ImportError, ModuleNotFoundError):
     )
     from views.sustainability_view import (
         build_sustainability_view,  # type: ignore # pyright: ignore[reportMissingImports]
+    )
+    from views.teacher_view import (  # type: ignore # pyright: ignore[reportMissingImports]
+        build_teacher_view,
     )
     from views.training_view import (
         build_training_view,  # type: ignore # pyright: ignore[reportMissingImports]
@@ -134,6 +139,9 @@ async def main(page: ft.Page):
         saved_theme = await asyncio.wait_for(prefs.get(PREF_THEME), timeout=3)
         saved_alerts = await asyncio.wait_for(prefs.get(PREF_ALERTS), timeout=3)
         state.alerts_enabled = saved_alerts != "0"
+        saved_room = await asyncio.wait_for(prefs.get(PREF_CLASSROOM), timeout=3)
+        room = json.loads(saved_room) if saved_room else None
+        state.classroom = room if isinstance(room, dict) and room.get("token") else None
         if saved_lang in ("kk", "en"):
             state.lang = saved_lang
         if saved_theme in ("dark", "light"):
@@ -239,6 +247,7 @@ async def main(page: ft.Page):
         "training": lambda: build_training_view(page),
         "learn": lambda: build_learn_view(page, navigate, set_inner_back("learn"), prefs),
         "settings": lambda: build_settings_view(page, refresh_chrome, set_alerts_enabled),
+        "teacher": lambda: build_teacher_view(page, set_inner_back("teacher"), prefs),
     }
 
     def get_view(key: str) -> ft.Control:

@@ -817,3 +817,9 @@ router.include_router(labs_router)
 from api.learn import router as learn_router  # noqa: E402
 
 router.include_router(learn_router)
+
+# Classes: a teacher follows the students' lab and lesson results
+# (POST /classes, POST /classes/{code}/join, GET /classes/{code}/results).
+from api.classroom import router as classroom_router  # noqa: E402
+
+router.include_router(classroom_router)

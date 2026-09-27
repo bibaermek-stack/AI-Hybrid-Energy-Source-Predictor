@@ -52,6 +52,10 @@ How the pieces fit:
   offline. The same tab shows the progress in all 12 labs.
 - Progress is kept across visits: on the site in the browser's localStorage (`dashboard/components/progress_store.py`),
   in the app in SharedPreferences.
+- Classes (`api/classroom.py`): a teacher creates a class in the app (More → Teacher) and gives its code to the
+  students, who join under Labs. The server records what it grades (lab tests, practice tasks, lesson quizzes) under
+  the student; the teacher reads the table in the app or at `/static/classroom/index.html` (code + teacher key; only
+  the key's hash is stored). Storage: SQLite at `$CLASSROOM_DB` — on Railway put it on a volume.
 - `static/lab3d/` — the 3D viewer (three.js bundled locally, no CDN), meshes and `assembly.json` (which mesh is
   which part, kk/en). Rebuild meshes and `lab_state.json` with `python scripts/build_lab3d_assets.py`;
   `tests/test_lab3d_assets.py` fails when they are stale. On the site it is a Streamlit component
@@ -235,6 +239,10 @@ python -m unittest discover -s tests -v
 | GET / POST | `/labs/{id}/test`, `/labs/{id}/test/grade` | The lab's test without answers; grading |
 | POST | `/labs/{id}/tasks/{task}/check` | Check a practice task |
 | GET | `/static/lab3d/index.html` | 3D inverter lab (used by the app's WebView) |
+| POST / GET | `/labs/{id}/report`, `/lab-reports/{id}` | The student's report, rebuilt on the server; its page for an hour |
+| GET / POST | `/learn/lessons`, `/learn/lessons/{id}`, `/learn/quizzes/{id}`, `/learn/quizzes/{id}/grade` | Learn lessons (Flet Markdown) and their quizzes |
+| POST / GET / DELETE | `/classes`, `/classes/{code}/join`, `/classes/{code}/results`, `/classes/{code}/students/{id}` | Classes: create, join, the teacher's table (`X-Teacher-Key`), remove a student |
+| GET | `/static/classroom/index.html` | The class table on a computer |
 
 🔒 = requires the `X-API-Key` header matching `ECOPREDICT_API_KEY`. These two routes
 read/write the Solarman credentials the whole process authenticates with, and the API

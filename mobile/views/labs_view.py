@@ -23,14 +23,14 @@ try:
     from mobile import api_client as api_client_module
     from mobile.api_client import api_client
     from mobile.components.line_chart import build_line_chart
-    from mobile.state import state
+    from mobile.state import PREF_CLASSROOM, state
 except (ImportError, ModuleNotFoundError):
     import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
     from components.line_chart import (
         build_line_chart,  # type: ignore # pyright: ignore[reportMissingImports]
     )
-    from state import state  # type: ignore # pyright: ignore[reportMissingImports]
+    from state import PREF_CLASSROOM, state  # type: ignore # pyright: ignore[reportMissingImports]
 
 PREF_PASSED = "ecopredict.labs_passed"
 PREF_TASKS = "ecopredict.labs_tasks_done"  # {lab_id: [task ids solved]}
@@ -223,10 +223,127 @@ def build_labs_view(
             data=lab["id"],
         )
 
+    # ---- the class this phone joined (api/classroom.py) ------------------------
+    def class_card() -> ft.Control:
+        room = state.classroom
+        if room:
+            body: List[ft.Control] = [
+                ft.Icon(ft.Icons.GROUPS, color=c["success"]),
+                ft.Text(
+                    t("class_member", cls=room.get("class_name", ""), name=room.get("name", "")),
+                    size=12,
+                    color=c["text_primary"],
+                    expand=True,
+                ),
+                ft.TextButton(
+                    t("class_leave"), on_click=lambda e: confirm_leave(), data="class_leave"
+                ),
+            ]
+        else:
+            body = [
+                ft.Icon(ft.Icons.GROUPS_OUTLINED, color=c["primary"]),
+                ft.Text(t("class_none"), size=11, color=c["text_secondary"], expand=True),
+                ft.TextButton(t("class_join"), on_click=lambda e: open_join(), data="class_join"),
+            ]
+        return ft.Container(
+            ft.Row(body, spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=ft.Padding.symmetric(horizontal=12, vertical=6),
+            border_radius=12,
+            bgcolor=c["surface_variant"],
+            data="class_card",
+        )
+
+    async def save_classroom() -> None:
+        if state.classroom:
+            await save_pref(PREF_CLASSROOM, state.classroom)
+        elif prefs is not None:
+            try:
+                await prefs.set(PREF_CLASSROOM, "")
+            except Exception as err:
+                print(f"class not cleared: {err}")
+
+    def open_join() -> None:
+        code = ft.TextField(
+            label=t("class_code"),
+            capitalization=ft.TextCapitalization.CHARACTERS,
+            max_length=8,
+            dense=True,
+        )
+        name = ft.TextField(label=t("report_name"), value=data["student"]["name"], dense=True)
+        note = ft.Text("", size=12, selectable=True)
+
+        async def join(e=None) -> None:
+            if not (code.value or "").strip() or not (name.value or "").strip():
+                note.value, note.color = t("class_need"), c["warning"]
+                page.update()
+                return
+            res = await api_client.classroom_join(code.value, name.value.strip())
+            if res is None:
+                note.value, note.color = t("class_err", reason=_reason()), c["error"]
+                page.update()
+                return
+            state.classroom = {
+                "code": res["code"],
+                "token": res["token"],
+                "class_name": res.get("class_name", ""),
+                "name": name.value.strip(),
+            }
+            data["student"]["name"] = name.value.strip()
+            await save_classroom()
+            await save_pref(PREF_STUDENT, data["student"])
+            page.pop_dialog()
+            status.value, status.color = (
+                t("class_joined", cls=res.get("class_name", "")),
+                c["success"],
+            )
+            render_list()
+            page.update()
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text(t("class_join")),
+                content=ft.Column(
+                    [
+                        ft.Text(t("class_none"), size=12, color=c["text_secondary"]),
+                        code,
+                        name,
+                        note,
+                    ],
+                    tight=True,
+                    spacing=8,
+                ),
+                actions=[
+                    ft.TextButton(t("report_close"), on_click=lambda e: page.pop_dialog()),
+                    ft.Button(t("class_join"), icon=ft.Icons.LOGIN, on_click=join, data="join"),
+                ],
+                data="join_dialog",
+            )
+        )
+
+    def confirm_leave() -> None:
+        async def leave(e=None) -> None:
+            state.classroom = None
+            await save_classroom()
+            page.pop_dialog()
+            render_list()
+            page.update()
+
+        page.show_dialog(
+            ft.AlertDialog(
+                title=ft.Text(t("class_leave")),
+                content=ft.Text(t("class_leave_q")),
+                actions=[
+                    ft.TextButton(t("report_close"), on_click=lambda e: page.pop_dialog()),
+                    ft.Button(t("class_leave"), on_click=leave, data="leave"),
+                ],
+            )
+        )
+
     def render_list() -> None:
         list_column.controls = [
             ft.Text(t("labs_title"), size=16, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Text(t("labs_sub"), size=11, color=c["text_secondary"]),
+            class_card(),
             status,
         ]
         for i, lab in enumerate(data["labs"] or [], start=1):

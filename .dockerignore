@@ -83,3 +83,6 @@ desktop.ini
 .github/
 Dockerfile.dev
 docker-compose.override.yml
+
+# Local class results database (api/classroom.py)
+data/classroom.sqlite3*
