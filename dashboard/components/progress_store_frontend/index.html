@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>progress store</title></head>
+<body>
+<script>
+// Keeps the labs progress in this browser's localStorage (see
+// dashboard/components/progress_store.py). Streamlit's component protocol,
+// spoken directly: on the first render the stored progress goes back to
+// Python once; on every render the "save" argument, if any, is written.
+(function () {
+  var sent = false;
+  function post(type, data) {
+    var msg = Object.assign({ isStreamlitMessage: true, type: type }, data || {});
+    window.parent.postMessage(msg, '*');
+  }
+  function read(key) {
+    try { return JSON.parse(window.localStorage.getItem(key) || 'null'); } catch (e) { return null; }
+  }
+  window.addEventListener('message', function (e) {
+    if (!e.data || e.data.type !== 'streamlit:render') return;
+    var args = e.data.args || {};
+    var key = String(args.storage_key || 'ecopredict.labs_progress');
+    if (!sent) {
+      sent = true;
+      post('streamlit:setComponentValue', { value: { stored: read(key) }, dataType: 'json' });
+    }
+    if (typeof args.save === 'string') {
+      try { window.localStorage.setItem(key, args.save); } catch (err) { /* private mode, quota */ }
+    }
+  });
+  post('streamlit:componentReady', { apiVersion: 1 });
+  post('streamlit:setFrameHeight', { height: 0 });
+})();
+</script>
+</body>
+</html>

@@ -148,3 +148,43 @@ class ProgressTracker:
 
     def reset(self) -> None:
         self._store[self.STATE_KEY] = self._empty()
+
+    def merge(self, other: Any) -> bool:
+        """
+        Add progress saved elsewhere (the browser's localStorage) to this one:
+        union of lessons, labs and tasks, best quiz score. ``other`` comes from
+        the browser, so anything malformed is skipped. Returns True if this
+        progress changed.
+        """
+        if not isinstance(other, dict):
+            return False
+        before = repr(self.data)
+        lab_ids = _lab_ids()
+
+        def ids(value: Any) -> list[str]:
+            if not isinstance(value, list):
+                return []
+            return [v for v in value[:500] if isinstance(v, str) and 0 < len(v) <= 80]
+
+        for lesson in ids(other.get("lessons_done")):
+            self.mark_lesson(lesson)
+        for lab_id in ids(other.get("labs_done")):
+            if lab_id in lab_ids:
+                self.mark_lab(lab_id)
+        tasks = other.get("lab_tasks")
+        if isinstance(tasks, dict):
+            for lab_id, done in tasks.items():
+                if lab_id in lab_ids:
+                    for task_id in ids(done):
+                        self.mark_task(lab_id, task_id)
+        quizzes = other.get("quizzes")
+        if isinstance(quizzes, dict):
+            for quiz_id, pct in list(quizzes.items())[:500]:
+                if isinstance(quiz_id, str) and isinstance(pct, (int, float)):
+                    self.record_quiz(quiz_id, min(max(float(pct), 0.0), 100.0))
+        exercises = other.get("exercises")
+        if isinstance(exercises, dict):
+            for eid, ok in list(exercises.items())[:500]:
+                if isinstance(eid, str) and ok is True:
+                    self.mark_exercise(eid)
+        return repr(self.data) != before

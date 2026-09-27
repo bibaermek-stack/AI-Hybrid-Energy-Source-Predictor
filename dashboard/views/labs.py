@@ -10,7 +10,9 @@ model (dashboard/components/lab3d.py).
 Results are kept in session_state. The page used to draw them inside
 ``if st.button(...)``: they vanished on the next click, and the reflection quiz
 under them could never be submitted (its button's rerun removed it). A lab now
-counts as completed when its test is passed.
+counts as completed when its test is passed. The progress (passed labs, solved
+tasks, best test scores) is also kept in the browser, so it survives a reload
+and the next visit (dashboard/components/progress_store.py).
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ import streamlit as st
 from dashboard.components.lab_tasks_ui import render_lab_tasks_panel
 from dashboard.components.markdown_math import katex_help_caption, render_markdown_math
 from dashboard.components.metric_card import metric_row
+from dashboard.components.progress_store import progress_slot, sync_progress
 from dashboard.components.states import empty_state, error_state, loading_state
 from dashboard.components.status_badge import render_status_badge
 from dashboard.components.ui_kit import section_header
@@ -66,6 +69,7 @@ def render(lang: str, texts: dict | None = None, models_status: dict | None = No
 def _render(lang: str) -> None:
     theme = str(st.session_state.get("ep_theme") or "Dark")
     progress = ProgressTracker.from_session(st.session_state)
+    store = progress_slot()
 
     section_header(
         _t(lang, "Interactive laboratories", "Интерактивті зертханалар"),
@@ -135,6 +139,7 @@ def _render(lang: str) -> None:
             _lab3d_test_note(lang)
         else:
             _test_panel(lab_id, lang, progress)
+    sync_progress(store, progress)  # last: saves whatever this run changed
 
 
 def _tabs(labels: list[str], key: str):
