@@ -2,7 +2,7 @@
 Global Application State Manager for EcoPredict AI Mobile.
 """
 
-from typing import Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Tuple
 try:
     from mobile.config import DEFAULT_API_BASE, COLORS, get_text
 except (ImportError, ModuleNotFoundError):
@@ -46,6 +46,11 @@ class AppState:
         # A lab to open when the Labs screen shows next (a Learn lesson links
         # to its labs); consumed by the labs view.
         self.pending_lab: str = ""
+        # Solarman station alerts (mobile/solar_alerts.py), checked while the
+        # app is open; screens that show them register under a name.
+        self.alerts_enabled: bool = True
+        self.solar_alerts: List[Dict[str, Any]] = []
+        self.alert_listeners: Dict[str, Callable[[List[Dict[str, Any]]], None]] = {}
         # (role, text) with role "user" | "ai" | "error". Kept here, not in the
         # chat view, so the conversation survives the view being rebuilt when
         # the language or theme changes.
@@ -82,6 +87,14 @@ class AppState:
         if url and url.strip():
             self.api_base_url = url.strip().rstrip("/")
             self.notify()
+
+    def set_solar_alerts(self, alerts: List[Dict[str, Any]]) -> None:
+        self.solar_alerts = list(alerts)
+        for name, cb in list(self.alert_listeners.items()):
+            try:
+                cb(self.solar_alerts)
+            except Exception as e:  # a rebuilt screen's old control
+                print(f"Error in alert listener {name}: {e}")
 
     def subscribe(self, callback: Callable[[], None]):
         if callback not in self._listeners:

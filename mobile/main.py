@@ -38,7 +38,8 @@ try:
     from mobile.views.forecast_hub_view import build_forecast_hub
     from mobile.views.labs_view import build_labs_view
     from mobile.views.learn_view import build_learn_view
-    from mobile.views.live_view import build_live_view
+    from mobile import solar_alerts
+    from mobile.views.live_view import INVERTERS, build_live_view
     from mobile.views.more_view import TITLE_KEYS, build_more_view
     from mobile.views.optimization_view import build_optimization_view
     from mobile.views.overview_view import build_overview_view
@@ -75,7 +76,9 @@ except (ImportError, ModuleNotFoundError):
     from views.learn_view import (
         build_learn_view,  # type: ignore # pyright: ignore[reportMissingImports]
     )
-    from views.live_view import (
+    import solar_alerts  # type: ignore # pyright: ignore[reportMissingImports]
+    from views.live_view import (  # type: ignore # pyright: ignore[reportMissingImports]
+        INVERTERS,
         build_live_view,  # type: ignore # pyright: ignore[reportMissingImports]
     )
     from views.more_view import (  # type: ignore # pyright: ignore[reportMissingImports]
@@ -101,6 +104,7 @@ except (ImportError, ModuleNotFoundError):
 
 PREF_LANG = "ecopredict.lang"
 PREF_THEME = "ecopredict.theme"
+PREF_ALERTS = "ecopredict.alerts"  # "1" / "0"
 DESKTOP_PLATFORMS = {ft.PagePlatform.WINDOWS, ft.PagePlatform.MACOS, ft.PagePlatform.LINUX}
 
 
@@ -128,6 +132,8 @@ async def main(page: ft.Page):
     try:
         saved_lang = await asyncio.wait_for(prefs.get(PREF_LANG), timeout=3)
         saved_theme = await asyncio.wait_for(prefs.get(PREF_THEME), timeout=3)
+        saved_alerts = await asyncio.wait_for(prefs.get(PREF_ALERTS), timeout=3)
+        state.alerts_enabled = saved_alerts != "0"
         if saved_lang in ("kk", "en"):
             state.lang = saved_lang
         if saved_theme in ("dark", "light"):
@@ -139,6 +145,7 @@ async def main(page: ft.Page):
         try:
             await prefs.set(PREF_LANG, state.lang)
             await prefs.set(PREF_THEME, state.theme_mode)
+            await prefs.set(PREF_ALERTS, "1" if state.alerts_enabled else "0")
         except Exception as err:
             print(f"Preferences not saved: {err}")
 
@@ -231,7 +238,7 @@ async def main(page: ft.Page):
         "labs": lambda: build_labs_view(page, set_inner_back("labs"), prefs),
         "training": lambda: build_training_view(page),
         "learn": lambda: build_learn_view(page, navigate, set_inner_back("learn"), prefs),
-        "settings": lambda: build_settings_view(page, refresh_chrome),
+        "settings": lambda: build_settings_view(page, refresh_chrome, set_alerts_enabled),
     }
 
     def get_view(key: str) -> ft.Control:
@@ -287,6 +294,49 @@ async def main(page: ft.Page):
         else:
             page.navigation_bar = build_bottom_nav(index, on_tab_change)
             page.controls.append(view_container)
+        paint_alert_badge(state.solar_alerts)
+
+    # ---- Solarman station alerts ------------------------------------------
+    def paint_alert_badge(alerts) -> None:
+        """A count on the Solarman tab while a station has something wrong."""
+        index = tab_index("live")
+        badge = str(len(alerts)) if alerts else None
+        destinations = []
+        if page.navigation_bar is not None:
+            destinations = page.navigation_bar.destinations
+        for control in page.controls:
+            if isinstance(control, ft.Row) and control.controls and isinstance(control.controls[0], ft.NavigationRail):
+                destinations = control.controls[0].destinations
+        if 0 <= index < len(destinations):
+            # The count goes on the tab's icon; a destination's own badge is not drawn.
+            dest = destinations[index]
+            for attr in ("icon", "selected_icon"):
+                icon = getattr(dest, attr)
+                name = icon.icon if isinstance(icon, ft.Icon) else icon
+                setattr(dest, attr, ft.Icon(name, badge=badge))
+
+    state.alert_listeners["nav"] = paint_alert_badge
+
+    async def check_alerts() -> None:
+        if not state.alerts_enabled:
+            state.set_solar_alerts([])
+        else:
+            try:
+                state.set_solar_alerts(await solar_alerts.check(api_client, INVERTERS))
+            except Exception as err:  # keep what was shown; try again next round
+                print(f"Station alert check failed: {err}")
+        page.update()  # after every listener has painted
+
+    async def alerts_loop() -> None:
+        await asyncio.sleep(3)  # let Home draw first
+        while True:
+            await check_alerts()
+            await asyncio.sleep(solar_alerts.CHECK_EVERY_S)
+
+    def set_alerts_enabled(enabled: bool) -> None:
+        state.alerts_enabled = bool(enabled)
+        page.run_task(save_prefs)
+        page.run_task(check_alerts)
 
     def refresh_chrome() -> None:
         """Redraw the app bar (status pill) without touching the screens."""
@@ -406,6 +456,7 @@ async def main(page: ft.Page):
 
     if not health_task.done():
         page.run_task(watch_health)
+    page.run_task(alerts_loop)
 
 
 if __name__ == "__main__":
