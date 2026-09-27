@@ -5,7 +5,8 @@
 # feature routes are not mounted — the state a Railway service with
 # Root Directory = mobile ends up in, where every screen 404s.
 # Missing optional server configuration (Solarman credentials, WeatherAPI key)
-# is reported as a warning, not a failure.
+# is reported as a warning, not a failure. The labs API and the 3D lab page
+# must answer: the app's Labs screen is built on them.
 
 name: Backend health
 
@@ -16,6 +17,7 @@ on:
   push:
     paths:
       - "mobile/config.py"
+      - "api/labs.py"
       - ".github/workflows/backend-health.yml"
 
 permissions:
@@ -114,4 +116,43 @@ jobs:
                   print(f"OK: {name}")
               else:
                   print(f"::warning::{name} -> {status} (server not redeployed from main yet?)")
+
+          # The 12 labs in the app (api/labs.py) and the 3D lab page it opens.
+          # These are on main, so a failure here is a broken deploy, not a lag.
+          problems = []
+          code, labs = get("/labs")
+          labs = labs.get("labs") if isinstance(labs, dict) else None
+          if code != 200 or not labs or len(labs) != 12:
+              problems.append(f"/labs -> {code}, {len(labs or [])} labs")
+          else:
+              print("OK: /labs lists the 12 labs")
+              if "task_count" not in labs[0]:
+                  print("::warning::/labs has no task_count (server not redeployed from main yet?)")
+          code, lab = get("/labs/lab_pv_physics")
+          if code != 200 or not isinstance(lab, dict) or not lab.get("params") or not lab.get("tasks"):
+              problems.append(f"/labs/lab_pv_physics -> {code}")
+          else:
+              print(f"OK: lab 1 has {len(lab['params'])} parameters and {len(lab['tasks'])} tasks")
+          req = urllib.request.Request(
+              base + "/labs/lab_pv_physics/run", data=b'{"params": {}}',
+              headers={"Content-Type": "application/json"}, method="POST")
+          try:
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  run = json.loads(r.read())
+              print(f"OK: lab 1 ran, {len(run.get('metrics') or [])} metrics")
+          except Exception as e:
+              problems.append(f"POST /labs/lab_pv_physics/run -> {e}")
+          code, test = get("/labs/lab_pv_physics/test?lang=kk")
+          if code != 200 or not isinstance(test, dict) or not test.get("questions"):
+              problems.append(f"/labs/lab_pv_physics/test -> {code}")
+          else:
+              print(f"OK: lab 1 test has {len(test['questions'])} questions")
+          for path in ("/static/lab3d/index.html", "/static/lab3d/lab3d.js", "/static/lab3d/assembly.json"):
+              code, _ = get(path)
+              if code != 200:
+                  problems.append(f"{path} -> {code}")
+          if not problems:
+              print("OK: the 3D lab page and its files are served")
+          if problems:
+              raise SystemExit("::error::Labs API broken: " + "; ".join(problems))
           EOF

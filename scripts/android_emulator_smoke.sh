@@ -5,8 +5,9 @@
 #   3. Back from a More screen returns to More,
 #   4. Back on Home closes the app,
 #   5. the camera opens and a capture reaches the diagnosis,
-#   6. the labs: the list loads, lab 1 runs on the server, Back returns to the
-#      list, and lab 12's 3D model loads in the WebView with WebGL. Until the
+#   6. the labs: the list loads, lab 1 runs on the server and has practice
+#      tasks, Back returns to the list, and lab 12's 3D model loads in the
+#      WebView with WebGL. Until the
 #      server the APK talks to serves /labs this step is reported, not failed.
 # Screenshots, UI dumps and logcat go to $OUT for the workflow artifact.
 set -uo pipefail
@@ -156,6 +157,18 @@ labs_step() {
   done
   shot 10_lab1_result
   [ -n "$ran" ] && pass "lab 1 ran on the server and shows its result" || fail "lab 1 result not shown: $(labels_of 10_lab1_result)"
+
+  if $UI tap "Тапсырма"; then
+    sleep 3
+    shot 10b_lab1_tasks
+    if $UI has "Тексеру" >/dev/null 2>&1; then
+      pass "lab 1 practice tasks tab shows tasks to check"
+    else
+      fail "lab 1 tasks tab has no Check button: $(labels_of 10b_lab1_tasks)"
+    fi
+  else
+    fail "Tasks tab not found in lab 1"
+  fi
 
   adb shell input keyevent KEYCODE_BACK
   sleep 3
