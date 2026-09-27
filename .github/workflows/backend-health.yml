@@ -6,7 +6,8 @@
 # Root Directory = mobile ends up in, where every screen 404s.
 # Missing optional server configuration (Solarman credentials, WeatherAPI key)
 # is reported as a warning, not a failure. The labs API and the 3D lab page
-# must answer: the app's Labs screen is built on them.
+# must answer: the app's Labs screen is built on them. The fault check must
+# load both of its models (src/fault_detection/diagnosis.py).
 
 name: Backend health
 
@@ -18,6 +19,7 @@ on:
     paths:
       - "mobile/config.py"
       - "api/labs.py"
+      - "src/fault_detection/**"
       - ".github/workflows/backend-health.yml"
 
 permissions:
@@ -167,4 +169,32 @@ jobs:
                     "attach the project's Postgres (DATABASE_URL) to the service.")
           else:
               print(f"OK: class results stored in {room.get('backend')}")
+
+          # Fault check: the fault detector's weights and the YOLO26 heads load,
+          # and a noise image (one of the placeholders) is refused as not a panel.
+          code, card = get("/detect/model")
+          if code == 404:
+              print("::warning::/detect/model -> 404 (server not redeployed from main yet?)")
+          elif code != 200 or not isinstance(card, dict):
+              raise SystemExit(f"::error::Fault diagnosis unavailable: /detect/model -> {code} {card}")
+          else:
+              if not card.get("detector_weights_present") or "detect/train" not in card.get("detector_weights", ""):
+                  raise SystemExit(f"::error::Fault detector weights missing: {card.get('detector_weights')}")
+              import glob, uuid
+              noise = sorted(glob.glob("data/solar-panel-images/Faulty_solar_panel/*/*.jpg"))[0]
+              boundary = uuid.uuid4().hex
+              body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"noise.jpg\"\r\n"
+                      "Content-Type: image/jpeg\r\n\r\n").encode() + open(noise, "rb").read() + f"\r\n--{boundary}--\r\n".encode()
+              req = urllib.request.Request(base + "/detect", data=body, method="POST",
+                                           headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+              try:
+                  with urllib.request.urlopen(req, timeout=120) as r:
+                      res = json.loads(r.read())
+              except Exception as e:
+                  raise SystemExit(f"::error::POST /detect -> {e}")
+              diag = res.get("diagnosis") or {}
+              if diag.get("status") != "not_panel":
+                  raise SystemExit(f"::error::Fault diagnosis on noise: {diag.get('status')} {res.get('diagnosis_error')}")
+              acc = (card.get("metrics") or {}).get("expected_accuracy", {})
+              print(f"OK: fault check loads both models; noise refused; confirmed answers measured {acc.get('confirmed')}")
           EOF
