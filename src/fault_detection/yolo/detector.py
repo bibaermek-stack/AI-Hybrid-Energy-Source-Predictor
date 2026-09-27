@@ -6,6 +6,7 @@ Weights: yolo_fault_detection/runs/runs/detect/train/weights/best.pt
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -24,8 +25,9 @@ def default_weights_path() -> Path:
         / "weights"
         / "best.pt",
         PROJECT_ROOT / "artifacts" / "best.pt",
-        PROJECT_ROOT / "yolo_fault_detection" / "yolo11n.pt",
     ]
+    # Not yolo_fault_detection/yolo11n.pt: that is the COCO model, whose
+    # "person" or "car" would come back as panel faults.
     for p in candidates:
         if p.exists():
             return p
@@ -46,6 +48,7 @@ class YOLOFaultDetector:
         self.weights = Path(weights) if weights else default_weights_path()
         self.conf = conf
         self._model = None
+        self._lock = threading.Lock()  # one predict at a time on the shared model
 
     def _load(self) -> Any:
         if self._model is None:
@@ -56,9 +59,14 @@ class YOLOFaultDetector:
             self._model = YOLO(str(self.weights))
         return self._model
 
-    def predict(self, image_path: str | Path) -> list[Detection]:
-        model = self._load()
-        results = model.predict(source=str(image_path), conf=self.conf, verbose=False)
+    def predict(self, image: str | Path | Any, conf: float | None = None) -> list[Detection]:
+        """`image` is a path or a BGR array; `conf` overrides the instance threshold."""
+        source = str(image) if isinstance(image, (str, Path)) else image
+        with self._lock:
+            model = self._load()
+            results = model.predict(
+                source=source, conf=self.conf if conf is None else conf, verbose=False
+            )
         detections: list[Detection] = []
         for r in results:
             names = r.names or {}

@@ -125,7 +125,10 @@ STRINGS = {
 
     # ---- fault detection -----------------------------------------------------
     "fl_title": ("Күн панельдеріндегі ақауларды анықтау", "Solar panel defect & dust diagnostics"),
-    "fl_desc": ("Панель суретін таңдаңыз — YOLO11n моделі диагноз қояды", "Pick a panel photo — the YOLO11n model diagnoses it"),
+    "fl_desc": (
+        "Панель суретін таңдаңыз — екі модель (YOLO26 + YOLO11) тексереді, келіспесе ашық айтады",
+        "Pick a panel photo — two models (YOLO26 + YOLO11) check it and say so when they are unsure",
+    ),
     "fl_btn_upload": ("Галерея", "Gallery"),
     "fl_btn_camera": ("Камера", "Camera"),
     "fl_cam_starting": ("Камера іске қосылуда…", "Starting the camera…"),
@@ -141,8 +144,11 @@ STRINGS = {
     ),
     "fl_pick_title": ("Панель суретін таңдаңыз", "Choose a panel photo"),
     "fl_waiting": ("Тексеруді күтуде", "Waiting for an image"),
-    "fl_hint": ("Панель суретін таңдаңыз — YOLO моделі диагноз қояды.", "Choose a panel photo — the YOLO model will diagnose it."),
-    "fl_scanner": ("YOLO11 AI панель сканері", "YOLO11 AI panel scanner"),
+    "fl_hint": (
+        "Панельді алдынан, жақыннан, көлеңкесіз түсіріңіз. Екі модель келіскенде ғана «Расталды» шығады.",
+        "Shoot the panel straight on, close up, without shadows. “Confirmed” appears only when both models agree.",
+    ),
+    "fl_scanner": ("YOLO26 + YOLO11 панель сканері", "YOLO26 + YOLO11 panel scanner"),
     "fl_analyzing": ("Талдау жүріп жатыр…", "Analyzing…"),
     "fl_sent": ("{filename} серверге жіберілді", "{filename} sent to the server"),
     "fl_failed": ("Диагноз орындалмады", "Diagnosis failed"),
@@ -170,6 +176,47 @@ STRINGS = {
     "fl_rec_electrical": ("Электрлік ақау белгісі. Инвертор мен қосылымдарды тексеріңіз.", "Signs of an electrical fault. Check the inverter and connections."),
     "fl_rec_physical": ("Физикалық зақым (жарық/сынық). Панельді ауыстыру қажет.", "Physical damage (crack/break). The panel needs replacing."),
     "fl_rec_unknown": ("Белгісіз класс — қолмен тексеріңіз.", "Unknown class — inspect manually."),
+    "fl_class_Bird": ("Құс саңғырығы", "Bird droppings"),
+    "fl_class_Clean": ("Таза панель", "Clean panel"),
+    "fl_class_Dust": ("Шаң", "Dust"),
+    "fl_class_Electrical": ("Электрлік ақау", "Electrical damage"),
+    "fl_class_Physical": ("Физикалық зақым", "Physical damage"),
+    "fl_class_Snow": ("Қар", "Snow"),
+    "fl_st_confirmed": ("✓ Расталды: {cls}", "✓ Confirmed: {cls}"),
+    "fl_st_likely": ("Ықтимал: {cls}", "Likely: {cls}"),
+    "fl_st_uncertain": ("Нақты емес — қайта түсіріңіз", "Not sure — please retake"),
+    "fl_st_not_panel": ("Бұл күн панелі емес сияқты", "This does not look like a solar panel"),
+    "fl_st_retake": ("Суретті қайта түсіріңіз", "Please retake the photo"),
+    "fl_expected": ("осындай жауаптың өлшенген дәлдігі {pct:.1f}%", "measured accuracy of such answers {pct:.1f}%"),
+    "fl_likely_advice": (
+        "Екі модель келісті, бірақ сенімділік төмен. Растау үшін жақынырақ қайта түсіріңіз.",
+        "Both models agree, with less confidence. Retake closer to confirm.",
+    ),
+    "fl_uncertain_advice": (
+        "Модельдер келіспеді, сондықтан жауап берілмейді. Панельді алдынан, жақыннан, көлеңкесіз "
+        "қайта түсіріңіз немесе қолмен тексеріңіз.",
+        "The models disagree, so no verdict is given. Retake the panel straight on, close up, "
+        "without shadows, or inspect it by hand.",
+    ),
+    "fl_not_panel_advice": (
+        "Кадрды панельмен толтырып, алдынан түсіріңіз. Бұл панель болса, жақынырақ қайта түсіріңіз.",
+        "Fill the frame with the panel and shoot it straight on. If it is a panel, retake closer.",
+    ),
+    "fl_retake_advice": (
+        "{issues}. Телефонды қозғалтпай, жарық жерде, панельге жақын түсіріңіз.",
+        "{issues}. Hold the phone still, in good light, close to the panel.",
+    ),
+    "fl_issue_blurry": ("Сурет бұлыңғыр", "The photo is blurred"),
+    "fl_issue_too_dark": ("Сурет тым қараңғы", "The photo is too dark"),
+    "fl_issue_overexposed": ("Сурет тым жарық (шағылысу)", "The photo is overexposed (glare)"),
+    "fl_issue_too_small": ("Сурет тым кішкентай", "The image is too small"),
+    "fl_model_clf": ("Жіктеуіш: {cls} {pct:.0f}%", "Classifier: {cls} {pct:.0f}%"),
+    "fl_model_det": ("Детектор: {cls} {pct:.0f}%", "Detector: {cls} {pct:.0f}%"),
+    "fl_candidates": ("Нұсқалар: ", "Candidates: "),
+    "fl_diag_unavailable": (
+        "Сенімділік тексерісі серверде қолжетімсіз — төменде тек YOLO11 нәтижесі.",
+        "The reliability check is unavailable on the server — below is the YOLO11 result only.",
+    ),
 
     # ---- ML models (training) -------------------------------------------------
     "tr_title": ("🎓 ML модельдерінің нәтижелері", "🎓 ML model results"),

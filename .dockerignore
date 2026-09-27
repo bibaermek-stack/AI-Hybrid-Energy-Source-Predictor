@@ -52,10 +52,12 @@ data/raw/
 data/processed/*
 !data/processed/build_features.csv
 
-# YOLO training runs (keep weights path if required via artifacts)
+# YOLO training runs, except the fault detector's weights: /detect loads them
+# (src/fault_detection/yolo/detector.py) and the diagnosis needs its classes.
 yolo_fault_detection/runs/
 yolo_fault_detection/runs.zip
 **/runs/
+!yolo_fault_detection/runs/runs/detect/train/weights/best.pt
 
 # Heavy optional artifacts (models re-fetched or baked selectively)
 artifacts/*.pt

@@ -400,13 +400,20 @@ def _get_yolo_detector():
     return _yolo_detector
 
 
+# The diagnosis was measured with the detector's boxes down to this confidence.
+DIAGNOSIS_DETECTOR_CONF = 0.05
+
+
 @router.post("/detect")
 async def detect_faults(file: UploadFile = File(...), conf: float = 0.25):
     """
-    Run YOLO panel-fault detection on an uploaded image.
+    Check an uploaded panel photo for faults.
 
-    Returns every detection with class, confidence and box, plus the highest
-    confidence one as `primary` for callers that just want a verdict.
+    `diagnosis` is the answer to show (src/fault_detection/diagnosis.py): a
+    status (confirmed / likely / uncertain / not_panel / retake), the class,
+    how sure, the candidates and the accuracy measured for that status on
+    real held-out photos. `detections` and `primary` are the YOLO11n boxes at
+    `conf`, as before, for older apps.
     """
     if file.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(
@@ -424,18 +431,19 @@ async def detect_faults(file: UploadFile = File(...), conf: float = 0.25):
             detail=f"Image is {len(payload)} bytes; limit is {MAX_UPLOAD_BYTES}.",
         )
 
-    import tempfile
+    from src.fault_detection.diagnosis import decode_image, get_diagnoser
 
-    suffix = Path(file.filename or "upload.jpg").suffix or ".jpg"
-    tmp_path = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-            tmp.write(payload)
-            tmp_path = Path(tmp.name)
+        img = await run_in_threadpool(decode_image, payload)  # a 10 MB JPEG takes a while
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
+    conf = max(0.0, min(1.0, float(conf)))
+    try:
         detector = _get_yolo_detector()
-        detector.conf = max(0.0, min(1.0, float(conf)))
-        detections = await run_in_threadpool(detector.predict, tmp_path)
+        raw = await run_in_threadpool(
+            detector.predict, img, min(conf, DIAGNOSIS_DETECTOR_CONF)
+        )
     except FileNotFoundError as e:
         # Weights absent — the deployment cannot do CV, say so rather than
         # returning an empty detection list that reads as "panel is clean".
@@ -447,16 +455,22 @@ async def detect_faults(file: UploadFile = File(...), conf: float = 0.25):
     except Exception as e:
         logger.error("detection failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if tmp_path is not None:
-            try:
-                tmp_path.unlink()
-            except OSError:
-                pass
+
+    diagnosis, diagnosis_error = None, None
+    try:
+        diagnosis = await run_in_threadpool(
+            get_diagnoser().diagnose,
+            img,
+            [d for d in raw if d.confidence >= DIAGNOSIS_DETECTOR_CONF],
+        )
+    except Exception as e:  # the boxes still go back
+        logger.error("diagnosis failed: %s", e, exc_info=True)
+        diagnosis_error = f"{type(e).__name__}: {e}"[:300]
 
     items = [
         {"class_name": d.class_name, "confidence": round(d.confidence, 4), "box": d.box}
-        for d in detections
+        for d in raw
+        if d.confidence >= conf
     ]
     items.sort(key=lambda d: d["confidence"], reverse=True)
     return {
@@ -464,6 +478,31 @@ async def detect_faults(file: UploadFile = File(...), conf: float = 0.25):
         "count": len(items),
         "detections": items,
         "primary": items[0] if items else None,
+        "diagnosis": diagnosis,
+        "diagnosis_error": diagnosis_error,
+    }
+
+
+@router.get("/detect/model")
+def detect_model_card():
+    """What the fault check runs on and how accurate it measured (fault_head.json)."""
+    from src.fault_detection.diagnosis import PROJECT_ROOT, get_diagnoser
+
+    try:
+        d = get_diagnoser()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Diagnosis unavailable: {e}")
+    weights = _get_yolo_detector().weights
+    return {
+        "classes": list(d.classifier.classes),
+        # the file /detect's boxes come from; the diagnosis expects the fault model
+        "detector_weights": str(weights.relative_to(PROJECT_ROOT))
+        if weights.is_relative_to(PROJECT_ROOT)
+        else weights.name,
+        "detector_weights_present": weights.exists(),
+        "decision": d.decision_cfg,
+        "quality": d.quality_cfg,
+        "metrics": d.metrics,
     }
 
 

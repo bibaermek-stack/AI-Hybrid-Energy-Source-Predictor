@@ -1,10 +1,14 @@
 """
 Solar Panel Fault & Dust Diagnostics View for EcoPredict AI Mobile.
 
-Sends the chosen image to POST /detect, which runs the trained YOLO11n model.
-Previously this screen ran no detection at all: the upload button and the three
-sample chips just printed fixed verdicts ("95.1% — surface dust identified")
-without an image ever leaving the device.
+Sends the chosen image to POST /detect. The server answers with a
+`diagnosis` (src/fault_detection/diagnosis.py): "confirmed" only when two
+different models agree confidently, "likely" when they agree less surely,
+"uncertain" when they disagree, "not_panel" and "retake" (blurred, dark,
+glare, tiny). This screen shows that verdict as given, with the accuracy the
+server measured for it, and never turns an uncertain answer into a verdict.
+A server without the diagnosis still returns the YOLO11n boxes; they are
+shown as before, marked as such.
 """
 
 import mimetypes
@@ -29,6 +33,9 @@ RECOMMENDATIONS = {
     "Physical": ("fl_rec_physical", "error"),
 }
 
+# Headline colour per diagnosis status; "confirmed" takes the class's tone.
+STATUS_TONE = {"likely": "warning", "uncertain": "text_secondary", "not_panel": "error", "retake": "warning"}
+
 # POST /detect rejects anything larger (api/routes.py MAX_UPLOAD_BYTES).
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 # Re-encode picked photos on the device: a phone camera JPEG is often 4–12 MB,
@@ -44,6 +51,56 @@ MOBILE_PLATFORMS = {ft.PagePlatform.ANDROID, ft.PagePlatform.IOS}
 
 def camera_supported(page) -> bool:
     return getattr(page, "platform", None) in MOBILE_PLATFORMS and not getattr(page, "web", False)
+
+
+def localized_class(cls, t) -> str:
+    return t(f"fl_class_{cls}") if cls in RECOMMENDATIONS else str(cls)
+
+
+def describe_diagnosis(dg: dict, t) -> dict:
+    """What to show for a /detect diagnosis: headline, confidence line, advice, tone, details."""
+    status = dg.get("status")
+    label = dg.get("label")
+    out = {"headline": "", "confidence": "—", "advice": "", "tone": STATUS_TONE.get(status, "warning"), "details": []}
+    if status == "retake":
+        issues = ", ".join(t(f"fl_issue_{i}", str(i)) for i in dg.get("issues") or [])
+        out.update(headline=t("fl_st_retake"), advice=t("fl_retake_advice", issues=issues or t("fl_st_retake")))
+        return out
+    if status == "not_panel":
+        out.update(headline=t("fl_st_not_panel"), advice=t("fl_not_panel_advice"))
+        return out
+
+    advice_key, tone = RECOMMENDATIONS.get(label, ("fl_rec_unknown", "warning"))
+    conf_line = t("fl_confidence", pct=float(dg.get("confidence") or 0) * 100)
+    expected = dg.get("expected_accuracy")
+    if expected:
+        conf_line += " · " + t("fl_expected", pct=float(expected) * 100)
+    if status == "confirmed":
+        out.update(headline=t("fl_st_confirmed", cls=localized_class(label, t)), confidence=conf_line, advice=t(advice_key), tone=tone)
+    elif status == "likely":
+        out.update(
+            headline=t("fl_st_likely", cls=localized_class(label, t)),
+            confidence=conf_line,
+            advice=t(advice_key) + " " + t("fl_likely_advice"),
+        )
+    else:  # uncertain: no verdict, only what each model said
+        out.update(headline=t("fl_st_uncertain"), advice=t("fl_uncertain_advice"), tone=STATUS_TONE["uncertain"])
+
+    models = dg.get("models") or {}
+    parts = []
+    for key, text_key in (("classifier", "fl_model_clf"), ("detector", "fl_model_det")):
+        m = models.get(key)
+        if m:
+            parts.append(t(text_key, cls=localized_class(m.get("label"), t), pct=float(m.get("p") or 0) * 100))
+    if parts:
+        out["details"].append(" · ".join(parts))
+    candidates = dg.get("candidates") or []
+    if status == "uncertain" and candidates:
+        out["details"].append(
+            t("fl_candidates")
+            + ", ".join(f"{localized_class(x.get('label'), t)} {float(x.get('p') or 0) * 100:.0f}%" for x in candidates)
+        )
+    return out
 
 
 def build_faults_view(page: ft.Page) -> ft.Control:
@@ -102,22 +159,38 @@ def build_faults_view(page: ft.Page) -> ft.Control:
             show(t("fl_failed"), "—", t("fl_err_server", reason=reason), c["error"])
             return
 
+        diagnosis = result.get("diagnosis")
+        if isinstance(diagnosis, dict) and diagnosis.get("status"):
+            show_diagnosis(diagnosis)
+            return
+
         primary = result.get("primary")
+        note = t("fl_diag_unavailable")
         if not primary:
-            show(t("fl_none_found"), t("fl_none_conf"), t("fl_none_advice"), c["text_secondary"])
+            show(t("fl_none_found"), t("fl_none_conf"), note + " " + t("fl_none_advice"), c["text_secondary"])
             return
 
         cls = str(primary.get("class_name", "?"))
         conf = float(primary.get("confidence", 0.0)) * 100
         advice_key, tone = RECOMMENDATIONS.get(cls, ("fl_rec_unknown", "warning"))
-        show(t("fl_detected", cls=cls), t("fl_confidence", pct=conf), t(advice_key), c[tone])
+        show(t("fl_detected", cls=class_name(cls)), t("fl_confidence", pct=conf), note + " " + t(advice_key), c[tone])
 
         others = result.get("detections") or []
         if len(others) > 1:
             txt_all.value = t("fl_also") + ", ".join(
-                f"{d['class_name']} {float(d['confidence']) * 100:.0f}%" for d in others[1:5]
+                f"{class_name(d['class_name'])} {float(d['confidence']) * 100:.0f}%" for d in others[1:5]
             )
             txt_all.visible = True
+        page.update()
+
+    def class_name(cls) -> str:
+        return localized_class(cls, t)
+
+    def show_diagnosis(dg: dict) -> None:
+        d = describe_diagnosis(dg, t)
+        show(d["headline"], d["confidence"], d["advice"], c[d["tone"]])
+        txt_all.value = "\n".join(d["details"])
+        txt_all.visible = bool(d["details"])
         page.update()
 
     file_picker = ft.FilePicker()
