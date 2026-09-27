@@ -27,6 +27,7 @@ fail() { echo "FAIL: $*"; failures=$((failures + 1)); }
 # The dump file is removed first: when uiautomator cannot dump (a WebGL view
 # that never goes idle), the previous screen's dump must not stand in for it.
 shot() {
+  dismiss_anr
   adb exec-out screencap -p > "$OUT/$1.png"
   adb shell rm -f /sdcard/ui.xml
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
@@ -35,12 +36,28 @@ shot() {
 in_front() { adb shell dumpsys window | grep -E "mCurrentFocus=|mFocusedApp=" | grep -q "$PKG"; }
 # Visible labels of a saved UI dump, one per line (for evidence in the log).
 labels_of() { grep -oE '(text|content-desc)="[^"]+"' "$OUT/$1.xml" | sed -E 's/^[a-z-]+="//; s/"$//' | tr '\n' '|' ; echo; }
+# On a slow emulator a system app (seen: Pixel Launcher) can stop answering
+# and its "isn't responding" dialog covers our app. "Wait" leaves both running.
+# Our own app not responding is a failure, not something to click away.
+dismiss_anr() {
+  local anr
+  anr="$(adb shell dumpsys window | grep -oE 'Application Not Responding: [A-Za-z0-9_.]+' | head -n 1)"
+  [ -z "$anr" ] && return 0
+  if echo "$anr" | grep -q "$PKG"; then
+    fail "the app itself is not responding ($anr)"
+    return 0
+  fi
+  echo "NOTE: $anr covered the screen; tapping Wait"
+  $UI tap "Wait" >/dev/null 2>&1 || adb shell input keyevent KEYCODE_BACK
+  sleep 2
+}
 launch() {
   adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
   # Python start-up plus the splash and first health check take a while on
   # an emulator; wait for the bottom bar rather than a fixed delay.
   for _ in $(seq 1 60); do
     if $UI has "Басты" --prefix >/dev/null 2>&1; then return 0; fi
+    dismiss_anr
     sleep 3
   done
   return 1
