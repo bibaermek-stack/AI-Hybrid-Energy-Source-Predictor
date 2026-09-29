@@ -1,174 +1,94 @@
 """
-The reliable panel fault check on the site: the same POST /detect the app uses.
+The panel fault check on the site: the same POST /detect the app uses.
 
 The API answers with a diagnosis (src/fault_detection/diagnosis.py) that is
 "confirmed" only when two different models agree confidently, and says
 "uncertain", "not a panel" or "retake" otherwise. This page shows that answer
-as given, with the accuracy the server measured for it; it does not load the
-models a second time in the Streamlit process.
+as given, with the accuracy the server measured for it, and draws the
+detector's boxes on the photo; it does not load the models a second time in
+the Streamlit process.
 """
 
 from __future__ import annotations
+
+import io
 
 import requests
 import streamlit as st
 
 from dashboard.utils.config import DETECT_URL
+from src.fault_detection.texts import WORDS, class_name, describe, t
 
-CLASS_NAMES = {
-    "Bird": ("Құс саңғырығы", "Bird droppings"),
-    "Clean": ("Таза панель", "Clean panel"),
-    "Dust": ("Шаң", "Dust"),
-    "Electrical": ("Электрлік ақау", "Electrical damage"),
-    "Physical": ("Физикалық зақым", "Physical damage"),
-    "Snow": ("Қар", "Snow"),
-}
-ADVICE = {
-    "Clean": ("Панель таза. Әрекет қажет емес.", "The panel is clean. No action needed."),
-    "Dust": (
-        "Шаң басқан. Жуу жоспарлаңыз — өнімділік 10–25% төмендейді.",
-        "Dusty. Schedule cleaning — output drops 10–25%.",
-    ),
-    "Bird": (
-        "Құс саңғырығы. Жергілікті қызып кету қаупі, тезірек тазалаңыз.",
-        "Bird droppings. Risk of hot spots — clean soon.",
-    ),
-    "Snow": (
-        "Қар жабыны. Тазартылмайынша өндіріс іс жүзінде нөлге тең.",
-        "Snow cover. Output is practically zero until cleared.",
-    ),
-    "Electrical": (
-        "Электрлік ақау белгісі. Инвертор мен қосылымдарды тексеріңіз.",
-        "Signs of an electrical fault. Check the inverter and connections.",
-    ),
-    "Physical": (
-        "Физикалық зақым (жарық/сынық). Панельді ауыстыру қажет.",
-        "Physical damage (crack/break). The panel needs replacing.",
-    ),
-}
-ISSUES = {
-    "blurry": ("сурет бұлыңғыр", "the photo is blurred"),
-    "too_dark": ("сурет тым қараңғы", "the photo is too dark"),
-    "overexposed": ("сурет тым жарық (шағылысу)", "the photo is overexposed (glare)"),
-    "too_small": ("сурет тым кішкентай", "the image is too small"),
-}
+TONES = {"success": st.success, "warning": st.warning, "error": st.error, "info": st.info}
 
 
-def _t(pair: tuple[str, str], lang: str) -> str:
-    return pair[1] if lang == "en" else pair[0]
+def post_detect(filename: str, content: bytes, content_type: str) -> dict:
+    resp = requests.post(
+        DETECT_URL,
+        files={"file": (filename, content, content_type or "image/jpeg")},
+        timeout=90,
+    )
+    try:
+        body = resp.json()
+    except ValueError:
+        body = {"detail": resp.text[:200]}
+    if not resp.ok:
+        raise RuntimeError(body.get("detail") or resp.status_code)
+    return body
 
 
-def _name(label: str | None, lang: str) -> str:
-    return _t(CLASS_NAMES[label], lang) if label in CLASS_NAMES else str(label)
+def boxed_image(content: bytes, detections: list, lang: str):
+    """The photo with the detector's boxes, or None if there are none."""
+    from PIL import Image, ImageDraw
+
+    if not detections:
+        return None
+    img = Image.open(io.BytesIO(content)).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    width = max(2, round(max(img.size) / 300))
+    for d in detections:
+        box = d.get("box") or []
+        if len(box) != 4:
+            continue
+        draw.rectangle(box, outline=(245, 158, 11), width=width)
+        draw.text(
+            (box[0] + width, box[1] + width),
+            f"{class_name(d.get('class_name'), lang)} {float(d.get('confidence') or 0) * 100:.0f}%",
+            fill=(245, 158, 11),
+        )
+    return img
 
 
 def run_fault_check(uploaded_file, lang: str) -> None:
     """POST the file to /detect and show the diagnosis."""
+    content = uploaded_file.getvalue()
     try:
-        resp = requests.post(
-            DETECT_URL,
-            files={
-                "file": (
-                    uploaded_file.name,
-                    uploaded_file.getvalue(),
-                    uploaded_file.type or "image/jpeg",
-                )
-            },
-            timeout=90,
-        )
-        body = resp.json()
-        if not resp.ok:
-            raise RuntimeError(body.get("detail") or resp.status_code)
+        body = post_detect(uploaded_file.name, content, uploaded_file.type)
     except Exception as err:
         st.error(("Тексеру орындалмады: " if lang == "kk" else "The check failed: ") + str(err))
         return
 
     dg = body.get("diagnosis")
     if not dg:
-        st.warning(
-            (
-                "Сенімділік тексерісі серверде қолжетімсіз: "
-                if lang == "kk"
-                else "The reliability check is unavailable: "
-            )
-            + str(body.get("diagnosis_error") or "")
-        )
+        st.warning(f"{t(WORDS['unavailable'], lang)}: {body.get('diagnosis_error') or ''}")
         return
 
-    status, label = dg.get("status"), dg.get("label")
-    if status == "retake":
-        issues = ", ".join(_t(ISSUES[i], lang) for i in dg.get("issues", []) if i in ISSUES)
-        st.warning(
-            f"**{'Суретті қайта түсіріңіз' if lang == 'kk' else 'Please retake the photo'}:** {issues}. "
-            + (
-                "Телефонды қозғалтпай, жарық жерде, панельге жақын түсіріңіз."
-                if lang == "kk"
-                else "Hold the phone still, in good light, close to the panel."
-            )
-        )
-        return
-    if status == "not_panel":
-        st.error(
-            "**Бұл күн панелі емес сияқты.** Кадрды панельмен толтырып, алдынан түсіріңіз."
-            if lang == "kk"
-            else "**This does not look like a solar panel.** Fill the frame with the panel and shoot it straight on."
-        )
-        return
+    d = describe(dg, lang)
+    text = f"**{d['headline']}**"
+    if d["confidence"]:
+        text += f"  \n{d['confidence']}"
+    text += f"\n\n{d['advice']}"
+    TONES[d["tone"]](text)
+    for line in d["details"]:
+        st.caption(line)
 
-    conf = float(dg.get("confidence") or 0) * 100
-    expected = dg.get("expected_accuracy")
-    measured = (
-        f" · {'осындай жауаптың өлшенген дәлдігі' if lang == 'kk' else 'measured accuracy of such answers'} {expected * 100:.1f}%"
-        if expected
-        else ""
-    )
-    if status == "confirmed":
-        head = f"✓ {'Расталды' if lang == 'kk' else 'Confirmed'}: **{_name(label, lang)}**"
-        text = f"{head} ({conf:.0f}%{measured})\n\n{_t(ADVICE.get(label, ('', '')), lang)}"
-        (
-            st.success
-            if label == "Clean"
-            else st.error if dg.get("severity") == "repair" else st.warning
-        )(text)
-    elif status == "likely":
-        st.warning(
-            f"{'Ықтимал' if lang == 'kk' else 'Likely'}: **{_name(label, lang)}** ({conf:.0f}%{measured})\n\n"
-            f"{_t(ADVICE.get(label, ('', '')), lang)} "
-            + (
-                "Растау үшін жақынырақ қайта түсіріңіз."
-                if lang == "kk"
-                else "Retake closer to confirm."
+    if dg.get("status") in ("confirmed", "likely", "uncertain"):
+        img = boxed_image(content, body.get("detections") or [], lang)
+        if img is not None:
+            st.image(
+                img,
+                caption=(
+                    "YOLO11 детекторының аймақтары" if lang == "kk" else "YOLO11 detector boxes"
+                ),
+                width="stretch",
             )
-        )
-    else:
-        st.info(
-            (
-                "**Нақты емес — қайта түсіріңіз.** Модельдер келіспеді, сондықтан жауап берілмейді."
-                if lang == "kk"
-                else "**Not sure — please retake.** The models disagree, so no verdict is given."
-            )
-            + (
-                f" {'Мүмкін' if lang == 'kk' else 'Candidates'}: "
-                + ", ".join(
-                    f"{_name(c['label'], lang)} {c['p'] * 100:.0f}%"
-                    for c in dg.get("candidates", [])
-                )
-                if dg.get("candidates")
-                else ""
-            )
-        )
-
-    models = dg.get("models") or {}
-    parts = []
-    if models.get("classifier"):
-        m = models["classifier"]
-        parts.append(
-            f"YOLO26 {'жіктеуіші' if lang == 'kk' else 'classifier'}: {_name(m['label'], lang)} {m['p'] * 100:.0f}%"
-        )
-    if models.get("detector"):
-        m = models["detector"]
-        parts.append(
-            f"YOLO11 {'детекторы' if lang == 'kk' else 'detector'}: {_name(m['label'], lang)} {m['p'] * 100:.0f}%"
-        )
-    if parts:
-        st.caption(" · ".join(parts))

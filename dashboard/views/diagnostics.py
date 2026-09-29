@@ -14,7 +14,6 @@ import streamlit as st
 from dashboard.components.fault_check import run_fault_check
 from dashboard.components.icons import icon_text
 from dashboard.utils.i18n import get_texts
-from dashboard.utils.models_loader import load_clean_dirty_model, load_yolo_model
 
 load_dotenv()
 
@@ -238,27 +237,20 @@ def render(lang: str, texts: dict | None = None, models_status: dict | None = No
         st.write(f"-  **{'Ластану және өзге шығындар' if lang == 'kk' else 'Soiling, shading & inverter losses'}:** {system_loss:.1f}%")
 
     # ------------------ AI IMAGE-BASED DUST/SOILING DETECTION ------------------
+    # One check: POST /detect, which answers only when two models agree and
+    # otherwise asks for a better photo. The former "ResNet50" choice needed a
+    # model file the repository does not have, and the single-YOLO choice
+    # printed a verdict right about 78% of the time; see docs/FAULT_DIAGNOSIS.md.
     st.markdown("---")
     st.markdown(f'<h4>{" AI Image-Based Soiling & Fault Detection" if lang == "en" else " Интеллектуалды сурет талдау жүйесі (Шаң/Ақаулықтар)"}</h4>', unsafe_allow_html=True)
     st.markdown(
-        f'<p style="color:#8b949e;">{"Upload a photo of a solar panel. The reliable check runs two models (YOLO26 + YOLO11) and answers only when they agree; otherwise it asks for a better photo." if lang == "en" else "Күн панелінің суретін жүктеңіз. Сенімді тексеру екі модельді (YOLO26 + YOLO11) қолданады және олар келіскенде ғана жауап береді, әйтпесе жақсырақ сурет сұрайды."}</p>',
+        f'<p style="color:#8b949e;">{"Upload a photo of a solar panel. Two models (YOLO26 + YOLO11) check it; the answer is given only when they agree, otherwise a better photo is asked for." if lang == "en" else "Күн панелінің суретін жүктеңіз. Екі модель (YOLO26 + YOLO11) тексереді; олар келіскенде ғана жауап беріледі, әйтпесе жақсырақ сурет сұралады."}</p>',
         unsafe_allow_html=True
-    )
-
-    # Model selection
-    model_choice = st.radio(
-        "Диагностикалық модельді таңдаңыз / Select Diagnostic Model:" if lang == "kk" else "Select Diagnostic Model:",
-        [
-            "Reliable check: YOLO26 + YOLO11 (recommended)" if lang == "en" else "Сенімді тексеру: YOLO26 + YOLO11 (ұсынылады)",
-            "ResNet50 Classifier (Clean/Dirty)" if lang == "en" else "ResNet50 Классификаторы (Таза/Лас)",
-            "YOLOv11 Object Detector (6-class Faults)" if lang == "en" else "YOLOv11 Объект детекторы (6-ақау түрі)"
-        ],
-        horizontal=True
     )
 
     uploaded_file = st.file_uploader(
         "Күн панелінің суретін жүктеңіз / Upload Solar Panel Image:" if lang == "kk" else "Upload Solar Panel Image:",
-        type=["jpg", "jpeg", "png"],
+        type=["jpg", "jpeg", "png", "webp"],
         key="soiling_image_uploader"
     )
 
@@ -266,112 +258,11 @@ def render(lang: str, texts: dict | None = None, models_status: dict | None = No
         col_img, col_pred = st.columns([1, 1])
         with col_img:
             st.image(uploaded_file, caption="Жүктелген сурет / Uploaded Image" if lang == "kk" else "Uploaded Image", width='stretch')
-    
+
         with col_pred:
             if st.button("Диагностиканы бастау / Start AI Diagnosis" if lang == "kk" else "Start AI Diagnosis", width='stretch'):
-                with st.spinner("Модель жүктелуде және сурет талдануда... / Analyzing image..."):
-                    try:
-                        import cv2
-                        import numpy as np
-                        from PIL import Image
-                    
-                        if "YOLO26" in model_choice:
-                            run_fault_check(uploaded_file, lang)
-                        elif "ResNet50" in model_choice:
-                            import tensorflow as tf
-                            # Load model from cache
-                            model = load_clean_dirty_model()
-                        
-                            # Open and preprocess image
-                            img = Image.open(uploaded_file).convert("RGB")
-                            img_resized = img.resize((224, 224))
-                            img_array = tf.keras.preprocessing.image.img_to_array(img_resized)
-                            img_array = tf.expand_dims(img_array, 0)
-                        
-                            # Preprocess input using ResNet50 preprocess_input
-                            preprocessed_img = tf.keras.applications.resnet50.preprocess_input(img_array)
-                        
-                            # Run prediction
-                            predictions = model.predict(preprocessed_img)
-                            probs = predictions[0]
-                        
-                            clean_prob = float(probs[0]) * 100
-                            dirty_prob = float(probs[1]) * 100
-                        
-                            st.markdown(f"##### ** {'Талдау нәтижесі' if lang == 'kk' else 'Analysis Result'}:**")
-                        
-                            # Clean vs Dirty progress bars
-                            st.write(f"{'Таза панель' if lang == 'kk' else 'Clean panel'}: {clean_prob:.2f}%")
-                            st.progress(clean_prob / 100.0)
-                        
-                            st.write(f"{'Шаң/Лас панель' if lang == 'kk' else 'Dusty/Dirty panel'}: {dirty_prob:.2f}%")
-                            st.progress(dirty_prob / 100.0)
-                        
-                            if clean_prob > dirty_prob:
-                                st.success(
-                                    f" **Панель таза! / Panel is Clean!** (Сенімділік / Confidence: {clean_prob:.2f}%)"
-                                    if lang == "kk" else
-                                    f" **Panel is Clean!** (Confidence: {clean_prob:.2f}%)"
-                                )
-                            else:
-                                st.warning(
-                                    f" **Панель шаң басқан немесе ластанған! / Panel is Dusty or Dirty!** (Сенімділік / Confidence: {dirty_prob:.2f}%)\n\n"
-                                    " **Ұсыныс / Recommendation:** Панель бетінде шаң немесе кір жиналған. Өнімділікті 10-30%-ға арттыру үшін панель бетін жуу ұсынылады."
-                                    if lang == "kk" else
-                                    f" **Panel is Dusty or Dirty!** (Confidence: {dirty_prob:.2f}%)\n\n"
-                                    " **Recommendation:** Dust or dirt has accumulated. Cleaning the panels is recommended to restore 10-30% of lost generation."
-                                )
-                        else:
-                            # Load YOLO model
-                            yolo_model = load_yolo_model()
-                        
-                            # Open PIL image
-                            img = Image.open(uploaded_file).convert("RGB")
-                        
-                            # Predict using YOLOv11-nano
-                            results = yolo_model.predict(img, conf=0.25)
-                        
-                            # Plot bounding boxes
-                            plotted_img = results[0].plot() # numpy array BGR
-                            plotted_img_rgb = cv2.cvtColor(plotted_img, cv2.COLOR_BGR2RGB)
-                        
-                            # Display annotated image
-                            st.image(plotted_img_rgb, caption="YOLOv11 Диагностика нәтижесі / YOLOv11 Diagnosis Result" if lang == "kk" else "YOLOv11 Diagnosis Result", width='stretch')
-                        
-                            boxes = results[0].boxes
-                            if boxes is None or len(boxes) == 0:
-                                st.success(
-                                    " **Ешқандай ақаулық анықталған жоқ! / No faults detected!**"
-                                    if lang == "kk" else
-                                    " **No faults detected!**"
-                                )
-                            else:
-                                st.markdown(f"##### ** {'Анықталған ақаулықтар' if lang == 'kk' else 'Detected Faults'}:**")
-                                detected_names = []
-                                for box in boxes:
-                                    cls_id = int(box.cls[0])
-                                    conf = float(box.conf[0]) * 100
-                                    name = yolo_model.names[cls_id]
-                                    detected_names.append(name)
-                                    st.write(f"-  **{name}** (Сенімділік / Confidence: {conf:.1f}%)")
-                                
-                                # Recommendations
-                                st.markdown(f"##### ** {'AI Ұсыныстар' if lang == 'kk' else 'AI Recommendations'}:**")
-                                unique_detections = set(detected_names)
-                                for det in unique_detections:
-                                    if det == "Dust" or det == "Bird":
-                                        st.info(" **Dust / Bird:** Панель беті кірлеген. Оны таза сумен жуу арқылы өнімділікті қалпына келтіріңіз." if lang == "kk" else " **Dust / Bird:** Panel surface is soiled. Wash with clean water to restore yield.")
-                                    elif det == "Physical":
-                                        st.warning(" **Physical:** Панельде механикалық зақым немесе сызаттар байқалды. Физикалық бүлінулер өрт қаупін тудыруы мүмкін." if lang == "kk" else " **Physical:** Physical damage or cracks detected on modules. High risk of hot spots/fire.")
-                                    elif det == "Electrical":
-                                        st.error(" **Electrical:** Электрлік қосылыстарда немесе тізбектерде ақау анықталды. Кабельдер мен коннекторларды тексеріңіз." if lang == "kk" else " **Electrical:** Electrical anomaly detected. Inspect junction boxes, cabling, and connections.")
-                                    elif det == "Snow":
-                                        st.info(" **Snow:** Панель бетіне қар жиналған. Сақтық шараларын сақтай отырып, қарды тазалаңыз." if lang == "kk" else " **Snow:** Panel surface is covered in snow. Carefully sweep it off.")
-                                    elif det == "Clean":
-                                        st.success(" **Clean:** Панельдің таза бөлігі немесе таза панельдер анықталды." if lang == "kk" else " **Clean:** Clean panel surfaces detected.")
-                                    
-                    except Exception as ex:
-                        st.error(f"Қате орын алды / Error: {str(ex)}")
+                with st.spinner("Сурет талдануда... / Analyzing image..."):
+                    run_fault_check(uploaded_file, lang)
 
     # ------------------ KNOWLEDGE BASE ACCORDIONS ------------------
     st.markdown("---")

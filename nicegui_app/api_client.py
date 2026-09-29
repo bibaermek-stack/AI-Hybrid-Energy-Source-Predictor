@@ -113,6 +113,21 @@ class APIClient:
             "Бірақ сіз дашборд арқылы энергия болжамын есептей аласыз!"
         )
 
+    async def detect(self, content: bytes, filename: str, content_type: str) -> Dict[str, Any]:
+        """POST /detect; raises with the server's reason when it does not answer."""
+        url = f"{state.api_base_url}/detect"
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            resp = await client.post(
+                url, files={"file": (filename, content, content_type or "image/jpeg")}
+            )
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {"detail": resp.text[:200]}
+        if resp.status_code != 200:
+            raise RuntimeError(body.get("detail") or resp.status_code)
+        return body
+
     async def get_solarman_live(self) -> Dict[str, Any]:
         """Fetch Solarman telemetry."""
         url = f"{state.api_base_url}/solarman/live"

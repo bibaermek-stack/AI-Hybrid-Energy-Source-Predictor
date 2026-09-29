@@ -36,11 +36,9 @@ LOCALIZATION = {
         "fc_wind": "Жел Энергиясы",
 
         # Faults Page
-        "fl_title": "Күн Панельдеріндегі Ақауларды Анықтау (YOLO ML Vision)",
-        "fl_upload_hint": "Панель суретін осы жерге жүктеңіз немесе үлгіні таңдаңыз",
-        "fl_sample_clean": "Таза Панель",
-        "fl_sample_dust": "Шаң Басқан Панель",
-        "fl_sample_crack": "Зақымдалған Панель",
+        "fl_title": "Күн Панельдеріндегі Ақауларды Анықтау",
+        "fl_upload_hint": "Панель суретін жүктеңіз: екі модель (YOLO26 + YOLO11) келіскенде ғана жауап беріледі",
+        "fl_failed": "Тексеру орындалмады",
 
         # Optimization Page
         "opt_title": "Микрожелі Диспетчеризациясын Оңтайландыру",
@@ -98,10 +96,8 @@ LOCALIZATION = {
 
         # Faults Page
         "fl_title": "Solar Panel Defect & Dust Diagnostics",
-        "fl_upload_hint": "Upload panel image or click preset test samples",
-        "fl_sample_clean": "Clean Panel",
-        "fl_sample_dust": "Dusty Panel",
-        "fl_sample_crack": "Damaged Panel",
+        "fl_upload_hint": "Upload a panel photo: an answer is given only when two models (YOLO26 + YOLO11) agree",
+        "fl_failed": "The check failed",
 
         # Optimization Page
         "opt_title": "Microgrid Dispatch Optimization",
