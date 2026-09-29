@@ -64,6 +64,9 @@ def build_training_view(page: ft.Page) -> ft.Control:
     card_prec, val_prec, sub_prec = metric_card("Precision", c["primary"])
     card_rec, val_rec, sub_rec = metric_card("Recall", c["secondary"])
 
+    txt_solar_in_use = ft.Text("", size=11, color=c["warning"], visible=False)
+    txt_yolo_in_use = ft.Text("", size=11, color=c["warning"], visible=False)
+
     solar_importance = ft.Column([], spacing=8)
     wind_importance = ft.Column([], spacing=8)
 
@@ -147,6 +150,24 @@ def build_training_view(page: ft.Page) -> ft.Control:
         val_prec.value, sub_prec.value = _pct(test.get("precision")), t("tr_test_set")
         val_rec.value, sub_rec.value = _pct(test.get("recall")), t("tr_test_set")
 
+        in_use = data.get("in_use") or {}
+        fc = in_use.get("forecast_on_station")
+        txt_solar_in_use.value = (
+            t("tr_solar_in_use", mae=float(fc.get("mae_kw") or 0), pct=float(fc.get("mae_pct_of_rated") or 0), days=int(fc.get("test_days") or 0))
+            if fc
+            else t("tr_solar_in_use_unmeasured")
+        )
+        txt_solar_in_use.visible = bool(in_use)
+        fault = in_use.get("fault_check")
+        if fault and fault.get("detector_alone") is not None and fault.get("confirmed_accuracy") is not None:
+            txt_yolo_in_use.value = t(
+                "tr_yolo_in_use",
+                alone=float(fault["detector_alone"]) * 100,
+                confirmed=float(fault["confirmed_accuracy"]) * 100,
+                share=float(fault.get("confirmed_share") or 0) * 100,
+            )
+            txt_yolo_in_use.visible = True
+
         importance = data.get("feature_importance") or {}
         solar_importance.controls = importance_rows(importance.get("solar") or [], c["accent"])
         wind_importance.controls = importance_rows(importance.get("wind") or [], c["secondary"])
@@ -159,8 +180,10 @@ def build_training_view(page: ft.Page) -> ft.Control:
             txt_status,
             ft.Text(t("tr_solar_heading"), size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Row([card_rf, card_xgb, card_lstm], spacing=8),
+            txt_solar_in_use,
             ft.Text(t("tr_yolo_heading"), size=13, weight=ft.FontWeight.BOLD, color=c["text_primary"]),
             ft.Row([card_map, card_prec, card_rec], spacing=8),
+            txt_yolo_in_use,
             section(t("tr_solar_importance"), solar_importance),
             section(t("tr_wind_importance"), wind_importance),
             ft.Container(height=20),

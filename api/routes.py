@@ -3,6 +3,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from typing import Optional
 import logging
 import os
 import sys
@@ -645,13 +646,63 @@ def solarman_credentials_status():
     return credentials_status()
 
 
+def _forecast_accuracy(irradiance_source: str) -> Optional[dict]:
+    """
+    The station backtest's numbers for the method this forecast used, if one
+    has run in this process (GET /forecast/backtest; Backend health runs it).
+    """
+    from src.forecasting.backtest import latest
+
+    bt = latest()
+    if not bt:
+        return None
+    method = "rf_ghi" if irradiance_source == "weather_radiation" else "app_rated"
+    m = (bt.get("methods") or {}).get(method)
+    if not m:
+        return None
+    best = bt.get("best")
+    return {
+        "method": method,
+        "mae_kw": m["mae_kw"],
+        "mae_pct_of_rated": m["mae_pct_of_rated"],
+        "bias_kw": m["bias_kw"],
+        "daily_energy_error_pct": m["daily_energy_error_pct"],
+        "test_days": len(bt.get("test_days") or []),
+        "best_method": best,
+        "best_mae_pct_of_rated": (bt["methods"].get(best) or {}).get("mae_pct_of_rated"),
+        "computed_at": bt.get("computed_at"),
+    }
+
+
+@router.get("/forecast/backtest")
+async def forecast_backtest(days: int = 14):
+    """
+    The solar forecast against the station's actual generation over the last
+    `days` days (src/forecasting/backtest.py). Cached for 6 hours.
+    """
+    from src.forecasting.backtest import cached_backtest
+
+    days = max(6, min(int(days), 31))
+    try:
+        return await run_in_threadpool(cached_backtest, days)
+    except Exception as e:
+        logger.error("forecast backtest failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=503, detail=f"Backtest unavailable: {e}"[:500])
+
+
 @router.get("/solarman/forecast")
-def get_solarman_generation_forecast(dc_capacity_kwp: float = 50.0):
+def get_solarman_generation_forecast(dc_capacity_kwp: Optional[float] = None):
     """
     Fetch 24-hour weather forecast for Turkistan and predict hourly solar generation.
     Uses the new solar_forecast_rf.pkl (22 features) with iterative lag computation.
     Falls back to old solar_model.pkl if new model not found.
+
+    dc_capacity_kwp defaults to the station's rated power (SOLARMAN_RATED_KW);
+    the app used to send 50 kWp whatever the station was.
     """
+    from src.forecasting.backtest import rated_kw_default
+
+    dc_capacity_kwp = float(dc_capacity_kwp or rated_kw_default())
     try:
         from datetime import datetime
         import pickle as pkl
@@ -831,7 +882,16 @@ def get_solarman_generation_forecast(dc_capacity_kwp: float = 50.0):
                     "predicted_power_kw": round(pred_power, 3)
                 })
 
-        return {"forecasts": predictions}
+        sources = {h.get("radiation_source", "estimated_from_cloud_cover") for h in forecast_list}
+        irradiance_source = (
+            "weather_radiation" if sources == {"weather_radiation"} else "estimated_from_cloud_cover"
+        )
+        return {
+            "forecasts": predictions,
+            "dc_capacity_kwp": dc_capacity_kwp,
+            "irradiance_source": irradiance_source,
+            "accuracy": _forecast_accuracy(irradiance_source),
+        }
 
     except HTTPException:
         raise

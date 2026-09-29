@@ -57,6 +57,9 @@ def model_metrics() -> dict[str, Any]:
     return {
         "source": "artifacts/model_metrics.json",
         "solar_forecast": data.get("solar_forecast") or {},
+        # The numbers above are the papers' own. These are measured in use:
+        # the forecast against the station, the fault check on real photos.
+        "in_use": _in_use_metrics(),
         "yolo11n": {
             "best": yolo.get("best") or {},
             "test": yolo.get("test_set_all") or {},
@@ -68,6 +71,38 @@ def model_metrics() -> dict[str, Any]:
             "wind": _importances(routes.wind_model),
         },
     }
+
+
+def _in_use_metrics() -> dict[str, Any]:
+    out: dict[str, Any] = {"forecast_on_station": None, "fault_check": None}
+    try:
+        from src.forecasting.backtest import latest
+
+        bt = latest()
+        if bt:
+            m = (bt.get("methods") or {}).get("app_rated") or {}
+            out["forecast_on_station"] = {
+                "mae_kw": m.get("mae_kw"),
+                "mae_pct_of_rated": m.get("mae_pct_of_rated"),
+                "r2": m.get("r2"),
+                "test_days": len(bt.get("test_days") or []),
+            }
+    except Exception:
+        pass
+    try:
+        from src.fault_detection.diagnosis import HEAD_PATH
+
+        fm = json.loads(HEAD_PATH.read_text()).get("metrics") or {}
+        tiers = fm.get("tiers_heldout") or {}
+        out["fault_check"] = {
+            "detector_alone": (fm.get("accuracy") or {}).get("detector_alone_heldout"),
+            "confirmed_accuracy": (tiers.get("confirmed") or {}).get("accuracy"),
+            "confirmed_share": (tiers.get("confirmed") or {}).get("coverage"),
+            "photos": (fm.get("data") or {}).get("held_out_for_tiers"),
+        }
+    except Exception:
+        pass
+    return out
 
 
 class ImpactRequest(BaseModel):

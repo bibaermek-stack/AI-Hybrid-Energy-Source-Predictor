@@ -122,6 +122,16 @@ STRINGS = {
     "fc_col_irradiance": ("Радиация", "Irradiance"),
     "fc_col_cloud": ("Бұлт %", "Cloud %"),
     "fc_err_no_forecast": ("Болжам алынбады. {reason}", "No forecast. {reason}"),
+    "fc_capacity": ("Станция {kw:.0f} кВт", "Station {kw:.0f} kW"),
+    "fc_accuracy": (
+        "Станцияда өлшенген орташа қате: {mae:.1f} кВт ({pct:.0f}% номиналдан), соңғы {days} күн",
+        "Error measured on the station: {mae:.1f} kW on average ({pct:.0f}% of rated), last {days} days",
+    ),
+    "fc_accuracy_daily": ("тәуліктік энергия қатесі {pct:.0f}%", "daily energy error {pct:.0f}%"),
+    "fc_accuracy_unmeasured": (
+        "Дәлдігі станцияда әлі өлшенбеген; күн радиациясы бұлттылықтан шамаланады",
+        "Not yet measured on the station; sunlight is estimated from cloud cover",
+    ),
 
     # ---- fault detection -----------------------------------------------------
     "fl_title": ("Күн панельдеріндегі ақауларды анықтау", "Solar panel defect & dust diagnostics"),
@@ -230,6 +240,18 @@ STRINGS = {
     "tr_mae": ("MAE {mae} kW", "MAE {mae} kW"),
     "tr_test_images": ("тест: {n} сурет", "test: {n} images"),
     "tr_test_set": ("тест жиыны", "test set"),
+    "tr_solar_in_use": (
+        "Бұл R² зауытта өлшенген радиациямен алынған. Нақты болжамның станциядағы қатесі: {mae:.1f} кВт ({pct:.0f}% номиналдан), соңғы {days} күн.",
+        "This R² uses sunlight measured at the plant. The real forecast's error on the station: {mae:.1f} kW ({pct:.0f}% of rated), last {days} days.",
+    ),
+    "tr_solar_in_use_unmeasured": (
+        "Бұл R² зауытта өлшенген радиациямен алынған, болжамның дәлдігі емес. Станциядағы нақты қатесі әлі өлшенбеген.",
+        "This R² uses sunlight measured at the plant; it is not the forecast's accuracy. Its error on the station is not measured yet.",
+    ),
+    "tr_yolo_in_use": (
+        "Нақты фотоларда: жалғыз YOLO11 {alone:.0f}% дұрыс; екі модель келіскенде {confirmed:.1f}% (фотолардың {share:.0f}%-ы).",
+        "On real photos: YOLO11 alone is right {alone:.0f}% of the time; when two models agree, {confirmed:.1f}% ({share:.0f}% of photos).",
+    ),
     "feat_irradiation": ("Күн радиациясы", "Irradiation"),
     "feat_ambient": ("Ауа температурасы", "Ambient temperature"),
     "feat_module": ("Панель температурасы", "Module temperature"),

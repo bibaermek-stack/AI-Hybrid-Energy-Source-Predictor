@@ -392,8 +392,11 @@ class SolarmanProcessor:
                     temp_val = float(h.get("temp_c", 25.0))
                     cloud_pct = float(h.get("cloud", 50.0))
                     uv_val = float(h.get("uv", 0.0))
-                    # Prefer API solar radiation if present (W/m²)
-                    rad = h.get("solarradiation")
+                    # Prefer API solar radiation if present (W/m²). WeatherAPI calls
+                    # its GHI "short_rad"; only the sine estimate below was ever used.
+                    rad = h.get("short_rad")
+                    if rad is None:
+                        rad = h.get("solarradiation")
                     if rad is None:
                         rad = h.get("shortwave_radiation")
                     try:
@@ -402,13 +405,16 @@ class SolarmanProcessor:
                         hour_int = 12
                     if rad is None:
                         g = self._estimate_shortwave_wm2(hour_int, cloud_pct)
+                        source = "estimated_from_cloud_cover"
                     else:
                         g = max(0.0, float(rad))
+                        source = "weather_radiation"
                     records.append({
                         "time": iso_time,
                         "temperature": temp_val,
                         "cloud_cover": cloud_pct,
                         "shortwave_radiation": g,
+                        "radiation_source": source,
                         "uv_index": uv_val,
                     })
 

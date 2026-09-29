@@ -469,16 +469,28 @@ class APIClient:
             _http_post_file_sync, url, content, filename, content_type, 60.0
         )
 
-    async def get_forecast(self, dc_capacity_kwp: float = 50.0) -> Optional[List[Dict[str, Any]]]:
+    async def get_forecast(self, dc_capacity_kwp: Optional[float] = None) -> Optional[List[Dict[str, Any]]]:
         """
         24-hour hourly solar generation forecast.
 
         Returns None rather than a fabricated curve when the backend cannot
         answer, so the caller can say why instead of inventing numbers. The
         server needs WEATHERAPI_KEY configured or this route returns 500.
+
+        Without dc_capacity_kwp the server scales to the station's rated
+        power; this used to send 50 kWp whatever the station was.
+        forecast_meta keeps what the server says about the forecast itself:
+        the capacity, where the sunlight came from, and the error measured on
+        the station (accuracy, None until measured).
         """
-        res = await self._get("forecast", f"/solarman/forecast?dc_capacity_kwp={dc_capacity_kwp}")
+        path = "/solarman/forecast"
+        if dc_capacity_kwp:
+            path += f"?dc_capacity_kwp={dc_capacity_kwp}"
+        res = await self._get("forecast", path)
         if res and isinstance(res, dict):
+            self.forecast_meta = {
+                k: res.get(k) for k in ("dc_capacity_kwp", "irradiance_source", "accuracy")
+            }
             forecasts = res.get("forecasts")
             if isinstance(forecasts, list) and forecasts:
                 return forecasts

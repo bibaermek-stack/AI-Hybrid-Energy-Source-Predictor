@@ -8,6 +8,11 @@ forecast but were generated on the phone.
 
 The endpoint forecasts solar only, so there is no wind series here; adding one
 would mean going back to making it up.
+
+Under the cards: how far off this forecast has measured on the real station
+(the server's backtest, src/forecasting/backtest.py), or that it has not been
+measured yet. The model's R² 0.997 is not that number: it is measured with
+sunlight measured at a plant, which a forecast does not have.
 """
 
 import flet as ft
@@ -19,6 +24,28 @@ except (ImportError, ModuleNotFoundError):
     from state import state  # type: ignore # pyright: ignore[reportMissingImports]
     from api_client import api_client  # type: ignore # pyright: ignore[reportMissingImports]
     import api_client as api_client_module  # type: ignore # pyright: ignore[reportMissingImports]
+
+
+def accuracy_line(meta: dict, t) -> str:
+    """What the server measured about this forecast on the station, in one line."""
+    acc = meta.get("accuracy")
+    parts = []
+    if meta.get("dc_capacity_kwp"):
+        parts.append(t("fc_capacity", kw=float(meta["dc_capacity_kwp"])))
+    if acc:
+        parts.append(
+            t(
+                "fc_accuracy",
+                mae=float(acc.get("mae_kw") or 0),
+                pct=float(acc.get("mae_pct_of_rated") or 0),
+                days=int(acc.get("test_days") or 0),
+            )
+        )
+        if acc.get("daily_energy_error_pct") is not None:
+            parts.append(t("fc_accuracy_daily", pct=float(acc["daily_energy_error_pct"])))
+    elif meta.get("irradiance_source") == "estimated_from_cloud_cover":
+        parts.append(t("fc_accuracy_unmeasured"))
+    return " · ".join(parts)
 
 
 def build_forecast_view(page: ft.Page) -> ft.Control:
@@ -33,6 +60,7 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
     ref_chart = ft.Ref[ft.Row]()
     ref_table = ft.Ref[ft.DataTable]()
     ref_status = ft.Ref[ft.Text]()
+    ref_accuracy = ft.Ref[ft.Text]()
 
     def summary_card(title: str, icon, accent: str, value_ref, sub_ref) -> ft.Container:
         return ft.Container(
@@ -146,6 +174,7 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
         _set(ref_peak_at, t("fc_peak_at", hour=int(peak_row.get("hour", 0))))
         _set(ref_total, f"{total_kwh:.0f} kWh")
         _set(ref_total_sub, t("fc_hours_count", n=len(rows)))
+        _set(ref_accuracy, accuracy_line(getattr(api_client, "forecast_meta", None) or {}, t))
         note = api_client.cache_note("forecast")
         _set(ref_status, note)
         if ref_status.current is not None:
@@ -193,6 +222,7 @@ def build_forecast_view(page: ft.Page) -> ft.Control:
             ft.Text(t("fc_subtitle"), size=12, color=c["text_secondary"]),
             ft.Container(height=10),
             ft.Row([card_peak, card_total], spacing=10),
+            ft.Text("", size=11, color=c["text_secondary"], ref=ref_accuracy),
             ft.Container(height=12),
             chart_container,
             ft.Container(height=12),

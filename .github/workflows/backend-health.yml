@@ -20,6 +20,7 @@ on:
       - "mobile/config.py"
       - "api/labs.py"
       - "src/fault_detection/**"
+      - "src/forecasting/**"
       - ".github/workflows/backend-health.yml"
 
 permissions:
@@ -197,4 +198,21 @@ jobs:
                   raise SystemExit(f"::error::Fault diagnosis on noise: {diag.get('status')} {res.get('diagnosis_error')}")
               acc = (card.get("metrics") or {}).get("expected_accuracy", {})
               print(f"OK: fault check loads both models; noise refused; confirmed answers measured {acc.get('confirmed')}")
+
+          # The solar forecast against the station's actual generation
+          # (src/forecasting/backtest.py). Informational: a Solarman or weather
+          # outage must not fail the contract, so problems are warnings.
+          code, bt = get("/forecast/backtest?days=14", timeout=300)
+          if code == 404:
+              print("::warning::/forecast/backtest -> 404 (server not redeployed from main yet?)")
+          elif code != 200 or not isinstance(bt, dict):
+              print(f"::warning::forecast backtest unavailable: {code} {bt}")
+          else:
+              print(f"Forecast vs station ({bt.get('station_rated_kw')} kW rated), "
+                    f"test days {bt.get('test_days')}, PR {bt.get('pv_performance_ratio')}:")
+              for name, m in (bt.get("methods") or {}).items():
+                  print(f"  {name:12s} MAE {m['mae_kw']:.2f} kW ({m['mae_pct_of_rated']}% of rated) "
+                        f"bias {m['bias_kw']:+.2f} kW  R2 {m['r2']}  daily energy error {m['daily_energy_error_pct']}%  "
+                        f"({m['hours']} h)")
+              print(f"OK: best method on the station: {bt.get('best')}")
           EOF
