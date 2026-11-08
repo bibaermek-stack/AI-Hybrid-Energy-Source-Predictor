@@ -291,8 +291,8 @@ EcoPredict AI includes a cross-platform mobile application built with **Flet** (
 
 ### Running Mobile App
 
-Pinned to **flet 1.0.1** (`mobile/pyproject.toml`). Install the same version locally:
-`pip install "flet[all]==1.0.1"`.
+Pinned to **flet 1.0.5** (`mobile/pyproject.toml`). Install the same version locally:
+`pip install "flet[all]==1.0.5"`.
 
 ```bash
 # Desktop preview window (iPhone 16 frame, 393x852)
@@ -334,7 +334,7 @@ it must report `"api": "full"`. `"api": "stub"` means Root Directory still point
 
 ### Building Mobile Binaries:
 ```bash
-pip install "flet[cli]==1.0.1"
+pip install "flet[cli]==1.0.5"
 
 # Android APK (flet installs the Flutter/Android toolchain it needs)
 flet build apk mobile --yes

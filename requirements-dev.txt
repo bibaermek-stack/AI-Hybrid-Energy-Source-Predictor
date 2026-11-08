@@ -5,5 +5,5 @@ black>=24.0.0
 pytest>=8.0.0
 # Mobile smoke tests import the camera and WebView extensions' APIs; must match flet's pin
 # (mobile/pyproject.toml, checked by tests/test_mobile_smoke.py).
-flet-camera==1.0.1
-flet-webview==1.0.1
+flet-camera==1.0.5
+flet-webview==1.0.5

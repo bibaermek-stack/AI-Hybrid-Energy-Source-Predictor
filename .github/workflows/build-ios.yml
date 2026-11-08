@@ -67,7 +67,7 @@ jobs:
       # Only the CLI: the app's own dependencies come from mobile/pyproject.toml
       # and are resolved for iOS by flet build, not installed here.
       - name: Install Flet CLI
-        run: pip install "flet[cli]==1.0.1"
+        run: pip install "flet[cli]==1.0.5"
 
       - name: Build for iOS Simulator (unsigned)
         if: env.IOS_PROVISIONING_PROFILE_BASE64 == ''
