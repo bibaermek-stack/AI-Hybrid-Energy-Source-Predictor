@@ -44,6 +44,11 @@ company = "EcoPredict"
 # generic text is replaced below. The camera plugin asks at runtime.
 permissions = ["camera"]
 
+[tool.flet.android]
+# Application ID registered in Google Play Console. Without it Flet derives
+# kz.ecopredict.ecopredict_ai_mobile from the project name, which Play rejects.
+bundle_id = "kz.ecopredict.ai"
+
 # The diagnostics screen picks a panel photo with FilePicker. The system photo
 # picker needs no runtime permission, but App Store review rejects binaries that
 # link the photo APIs without a usage string. Deliberately not using
